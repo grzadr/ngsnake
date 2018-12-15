@@ -1,0 +1,348 @@
+# Snakefile for mapping reads from Whole Genome NGS
+
+# All input parameters are being read from config.yaml
+# Script will work on files in "project_dir"
+# genome in FASTA format is located in genome_dir and is prefixed with
+# "genome_prefix"like:
+# It assumes reads are located in "reads_dir" and they have the structure:
+# {sample}/{file_name}_{pair}.fq.gz, where {pair} may be "1" or "2"
+
+# Selected Picard command to implement
+# java -Xmx32g -jar /opt/conda/share/picard-2.18.16-0/picard.jar CollectHsMetrics I=CFA_615.bam O=CFA_615.hs_metrics.txt R=/data/OPUS/genome/CanFam3.1_Ensembl94.fa BAIT_INTERVALS=/data/OPUS/genome/CanFam3.1_Ensembl94.intervals TARGET_INTERVALS=/data/OPUS/genome/CanFam3.1_Ensembl94.intervals
+
+
+configfile: "config.yaml"
+
+project_main = config["project_dir"]
+project_reads = "/".join((project_main, config["reads_dir"]))
+project_genome = "/".join((project_main, config["genome_dir"], config["genome_prefix"]))
+project_samples =  "/".join((project_main, config["samples_dir"]))
+reads_pairs = ["1", "2"]
+
+(picard_version) = glob_wildcards("/opt/conda/share/picard-{version}/picard.jar")
+if not len(picard_version.version):
+    raise ValueError("no Picard jar file found")
+picard_jar = "/opt/conda/share/picard-{}/picard.jar".format(picard_version.version[0])
+
+print("Using Picard version {}".format(picard_jar))
+
+def reads_files_group():
+    dirs = glob_wildcards(project_samples + "/{dir}/")
+    print(dirs)
+    return dir
+
+samples_names = reads_files_group()
+
+rule all:
+    input:
+        gc_bias_metrics=expand("{project_samples}/{sample}/metrics/"
+                               "{sample}.GCBiasMetrics.txt",
+                               zip,
+                               project_samples=[project_samples, ]*len(samples_names),
+                               sample=sorted(samples_names)),
+        wgs_metrics=expand("{project_samples}/{sample}/metrics/"
+                            "{sample}.WgsMetrics.txt",
+                            zip,
+                            project_samples=[project_samples, ]*len(samples_names),
+                            sample=sorted(samples_names)),
+        alignment_metrics=expand("{project_samples}/{sample}/metrics/"
+                            "{sample}.AlignmentSummaryMetrics.txt",
+                            zip,
+                            project_samples=[project_samples, ]*len(samples_names),
+                            sample=sorted(samples_names)),
+        size_metrics=expand("{project_samples}/{sample}/metrics/"
+                            "{sample}.InsertSizeMetrics.txt",
+                            zip,
+                            project_samples=[project_samples, ]*len(samples_names),
+                            sample=sorted(samples_names)),
+        mark_duplicates=expand("{project_samples}/{sample}/metrics/"
+                               "{sample}.MarkDuplicates.txt",
+                               zip,
+                               project_samples=[project_samples, ]*len(samples_names),
+                               sample=sorted(samples_names)),
+        idxstats=expand("{project_samples}/{sample}/metrics/{sample}.idxstats",
+                        zip,
+                        project_samples=[project_samples, ]*len(samples_names),
+                        sample=sorted(samples_names)),
+        dup_stats=expand("{project_samples}/{sample}/metrics/{sample}.dup_stats",
+                         zip,
+                         project_samples=[project_samples, ]*len(samples_names),
+                         sample=sorted(samples_names)),
+        stats=expand("{project_samples}/{sample}/metrics/{sample}.stats",
+                     zip,
+                     project_samples=[project_samples, ]*len(samples_names),
+                     sample=sorted(samples_names)),
+        flagstats=expand("{project_samples}/{sample}/metrics/{sample}.flagstats",
+                         zip,
+                         project_samples=[project_samples, ]*len(samples_names),
+                         sample=sorted(samples_names)),
+        fastqc_files = expand("{project_samples}/{sample}/metrics/"
+                              "fastqc/{sample}_{pair}/{sample}_{pair}_fastqc.zip",
+                              zip,
+                              project_samples=[project_samples, ]*len(samples_names)*2,
+                              sample=sorted(samples_names*2),
+                              pair= reads_pairs * len(samples_names))
+    output:
+        "{project_main}/MultiQCReport/multiqc_report.html".format(project_main=project_main)
+    params:
+        output_dir="{project_main}/MultiQCReport/".format(project_main=project_main),
+    shell:
+        "multiqc {project_samples} -o {params.output_dir}"
+
+rule picard_validate_sam_file:
+    input:
+        marked_bam="{project_samples}/{sample}/{sample}.bam",
+        marked_bai="{project_samples}/{sample}/{sample}.bai",
+        genome="{}.fa".format(project_genome)
+    output:
+        txt=protected("{project_samples}/{sample}/metrics/{sample}.ValidateSamFile.txt"),
+        log="{project_samples}/{sample}/metrics/{sample}.ValidateSamFile.log"
+    threads: 4
+    params:
+        picard_jar = picard_jar
+    shell:
+        "java -Xmx32g -jar {params.picard_jar} ValidateSamFile \
+        I={input.marked_bam} OUTPUT={output.txt} \
+        R={input.genome} MODE='VERBOSE' > {output.log}"
+
+rule picard_gc_bias_metrics:
+    input:
+        marked_bam="{project_samples}/{sample}/{sample}.bam",
+        marked_bai="{project_samples}/{sample}/{sample}.bam.bai",
+        genome="{}.fa".format(project_genome),
+        genome_dict="{}.dict".format(project_genome)
+    output:
+        log=protected("{project_samples}/{sample}/logs/{sample}.GCBiasMetrics.log"),
+        metrics=protected("{project_samples}/{sample}/metrics/{sample}.GCBiasMetrics.txt"),
+        chart="{project_samples}/{sample}/metrics/{sample}.GCBiasMetrics.pdf",
+        summary="{project_samples}/{sample}/metrics/{sample}.GCBiasMetricsSummary.txt"
+    threads: 4
+    params:
+        picard_jar = picard_jar
+    shell:
+        "java -Xmx32g -jar {params.picard_jar} CollectGcBiasMetrics \
+        R={input.genome} I={input.marked_bam} O={output.metrics} S={output.summary} \
+        CHART={output.chart} > {output.log}"
+
+rule picard_wgs_metrics:
+    input:
+        marked_bam="{project_samples}/{sample}/{sample}.bam",
+        marked_bai="{project_samples}/{sample}/{sample}.bam.bai",
+        genome="{}.fa".format(project_genome),
+        genome_dict="{}.dict".format(project_genome)
+    output:
+        txt=protected("{project_samples}/{sample}/metrics/{sample}.WgsMetrics.txt"),
+        protected("{project_samples}/{sample}/logs/{sample}.WgsMetrics.log")
+    threads: 4
+    params:
+        picard_jar = picard_jar
+    shell:
+        "java -Xmx32g -jar {params.picard_jar} CollectWgsMetrics \
+        R={input.genome} I={input.marked_bam} O={output.txt} > {output.logs}"
+
+rule picard_alignment_summary:
+    input:
+        marked_bam="{project_samples}/{sample}/{sample}.bam",
+        marked_bai="{project_samples}/{sample}/{sample}.bam.bai",
+        genome="{}.fa".format(project_genome),
+        genome_dict="{}.dict".format(project_genome)
+    output:
+        txt=protected("{project_samples}/{sample}/metrics/{sample}.AlignmentSummaryMetrics.txt"),
+        log="{project_samples}/{sample}/logs/{sample}.AlignmentSummaryMetrics.log"
+    threads: 4
+    params:
+        picard_jar = picard_jar
+    shell:
+        "java -Xmx32g -jar {params.picard_jar} CollectAlignmentSummaryMetrics \
+        R={input.genome} I={input.marked_bam} O={output.txt} > {output.log}"
+
+rule picard_size_metrics:
+    input:
+        marked_bam="{project_samples}/{sample}/{sample}.bam",
+        marked_bai="{project_samples}/{sample}/{sample}.bam.bai",
+    output:
+        txt=protected("{project_samples}/{sample}/metrics/{sample}.InsertSizeMetrics.txt"),
+        pdf="{project_samples}/{sample}/metrics/{sample}.InsertSizeMetrics.pdf",
+        log="{project_samples}/{sample}/logs/{sample}.InsertSizeMetrics.log"
+    params:
+        picard_jar = picard_jar
+    threads: 4
+    shell:
+        "java -Xmx32g -jar {params.picard_jar} CollectInsertSizeMetrics \
+        I={input.marked_bam} \
+        O={output.txt} H={output.pdf} M=0.5 > {output.log}"
+
+rule samtools_stats:
+    input:
+        marked_bam="{project_samples}/{sample}/{sample}.bam",
+        marked_bai="{project_samples}/{sample}/{sample}.bam.bai"
+    output:
+        protected("{project_samples}/{sample}/metrics/{sample}.stats")
+    threads: 1
+    shell:
+        "samtools stats -d {input.marked_bam} > {output}"
+
+rule samtools_idxstats:
+    input:
+        marked_bam="{project_samples}/{sample}/{sample}.bam",
+        marked_bai="{project_samples}/{sample}/{sample}.bam.bai"
+    output:
+        protected("{project_samples}/{sample}/metrics/{sample}.idxstats")
+    threads: 1
+    shell:
+        "samtools idxstats {input.marked_bam} > {output}"
+
+rule samtools_dup_stats:
+    input:
+        marked_bam="{project_samples}/{sample}/{sample}.bam",
+        marked_bai="{project_samples}/{sample}/{sample}.bam.bai"
+    output:
+        protected("{project_samples}/{sample}/metrics/{sample}.dup_stats")
+    threads: 1
+    shell:
+        "samtools stats {input.marked_bam} > {output}"
+        
+rule samtools_flagstats:
+    input:
+        marked_bam="{project_samples}/{sample}/{sample}.bam",
+        marked_bai="{project_samples}/{sample}/{sample}.bam.bai"
+    output:
+        protected("{project_samples}/{sample}/metrics/{sample}.flagstats")
+    threads: 20
+    shell:
+        "samtools flagstat -@ {threads} {input.marked_bam} > {output}"
+        
+rule samtools_index_marked:
+    input:
+        "{project_samples}/{sample}/{sample}.bam"
+    output:
+        protected("{project_samples}/{sample}/{sample}.bam.bai")
+    threads: 20
+    shell:
+        "samtools index -@ {threads} {input} {output}"
+    
+rule picard_mark_duplicates:
+    input:
+        sorted_bam="{project_samples}/{sample}/{sample}.sorted.bam",
+        sorted_bai="{project_samples}/{sample}/{sample}.sorted.bam.bai"
+    output:
+        marked_bam=protected("{project_samples}/{sample}/{sample}.bam"),
+        marked_metrics="{project_samples}/{sample}/metrics/{sample}.MarkDuplicates.txt",
+        marked_log="{project_samples}/{sample}/logs/{sample}.MarkDuplicates.log"
+    params:
+        picard_jar=picard_jar
+    threads: 20
+    shell:
+        "java -Xmx160g -jar {params.picard_jar} \
+         MarkDuplicates I={input.sorted_bam} \
+         O={output.marked_bam} \
+         M={output.marked_metrics} > {output.marked_log}"
+        
+rule samtools_index_sorted:
+    input:
+        "{project_samples}/{sample}/{sample}.sorted.bam"
+    output:
+        temp("{project_samples}/{sample}/{sample}.sorted.bam.bai")
+    threads: 20
+    shell:
+        "samtools index -@ {threads} {input} {output}"
+
+rule samtools_sort:
+    input:
+        "{project_samples}/{sample}/{sample}.unsorted.bam"
+    output:
+        temp("{project_samples}/{sample}/{sample}.sorted.bam")
+    threads: 20
+    params:
+        memory="4G"
+    shell:
+        "samtools sort {input} -o {output} -@ {threads} -m {params.memory}"
+
+rule picard_add_metadata:
+    input:
+        "{project_samples}/{sample}/{sample}.missing.bam"
+    output:
+        temp("{project_samples}/{sample}/{sample}.unsorted.bam")
+    params:
+        picard_jar = picard_jar,
+        rgsm = "{sample}"
+    threads: 4
+    shell:
+        "java -Xmx32g -jar {params.picard_jar} AddOrReplaceReadGroups \
+        I={input} O={output} \
+        RGID={params.rgsm} \
+        RGSM={params.rgsm} \
+        RGPL=illumina \
+        RGLB={params.rgsm} \
+        RGPU={params.rgsm}"
+
+rule bwa_map_reads:
+    input:
+        reads_1="{project_samples}/{sample}/{sample}_1.fq.gz",
+        reads_2="{project_samples}/{sample}/{sample}_2.fq.gz",
+        genome="{project_genome}.ann".format(project_genome=project_genome)
+    output:
+        temp("{project_samples}/{sample}/{sample}.missing.bam")
+    params:
+        prefix="{project_genome}".format(project_genome=project_genome),
+        rg=r"@RG\tID:{sample}\tSM:{sample}"
+    threads:20
+    log:
+        "{project_samples}/{sample}/{sample}.bwa.log"
+    shell:
+        "(bwa mem -R '{params.rg}' -t {threads} {params.prefix} \
+        {input.reads_1} {input.reads_2} | samtools view -Sb - > {output}) 2> {log}"
+
+rule prepare_genome_index:
+    input:
+        "{project_genome}.fa"
+    output:
+        faidx="{project_genome}.fa.fai",
+        dict="{project_genome}.dict"
+    params:
+        picard_jar = picard_jar
+    run:
+        shell("samtools faidx {input} -o {output.faidx}")
+        shell("java -jar {params.picard_jar} "
+              "CreateSequenceDictionary "
+              "R={input} "
+              "O={output.dict}")
+
+rule prepare_bwa_genome:
+    input:
+        "{project_genome}.fa"
+    output:
+        "{project_genome}.ann"
+    params:
+        picard_jar = picard_jar
+    shell:
+        "bwa index -p {project_genome} {input}"
+
+# rule reads_forward_generate:
+#     input:
+#         lambda wildcards: sorted(samples_index[(wildcards.sample, "1")])
+#     output:
+#         "{project_samples}/{sample}/{sample}_1.fq.gz"
+#     threads: 5
+#     shell:
+#         "cat {input} > {output}"
+# 
+# rule reads_reverse_generate:
+#     input:
+#         lambda wildcards: sorted(samples_index[(wildcards.sample, "2")])
+#     output:
+#         "{project_samples}/{sample}/{sample}_2.fq.gz"
+#     threads: 5
+#     shell:
+#         "cat {input} > {output}"
+
+rule fastqc:
+    input:
+        "{project_samples}/{sample}/{sample}_{pair}.fq.gz"
+    output:
+        "{project_samples}/{sample}/metrics/fastqc/\
+        {sample}_{pair}/{sample}_{pair}_fastqc.zip"
+    params:
+        output_dir="{project_samples}/{sample}/metrics/fastqc/{sample}_{pair}"
+    shell:
+        "fastqc {input} -o {params.output_dir}"
