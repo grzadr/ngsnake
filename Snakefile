@@ -139,7 +139,7 @@ rule picard_wgs_metrics:
         picard_jar = picard_jar
     shell:
         "java -Xmx32g -jar {params.picard_jar} CollectWgsMetrics \
-        R={input.genome} I={input.marked_bam} O={output.txt} > {output.logs}"
+        R={input.genome} I={input.marked_bam} O={output.txt} > {output.log}"
 
 rule picard_alignment_summary:
     input:
