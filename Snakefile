@@ -27,9 +27,10 @@ picard_jar = "/opt/conda/share/picard-{}/picard.jar".format(picard_version.versi
 print("Using Picard version {}".format(picard_jar))
 
 def reads_files_group():
-    dirs = glob_wildcards(project_samples + "/{dir}/")
+    (dirs, ) = glob_wildcards(project_samples + "/{dir}")
+    dirs = [ele for ele in dirs if not ele.endswith("fq.gz")]
     print(dirs)
-    return dir
+    return dirs
 
 samples_names = reads_files_group()
 
