@@ -96,7 +96,7 @@ rule picard_validate_sam_file:
         genome="{}.fa".format(project_genome)
     output:
         txt=protected("{project_samples}/{sample}/metrics/{sample}.ValidateSamFile.txt"),
-        log="{project_samples}/{sample}/metrics/{sample}.ValidateSamFile.log"
+        log=protected("{project_samples}/{sample}/metrics/{sample}.ValidateSamFile.log")
     threads: 4
     params:
         picard_jar = picard_jar
@@ -114,8 +114,8 @@ rule picard_gc_bias_metrics:
     output:
         log=protected("{project_samples}/{sample}/logs/{sample}.GCBiasMetrics.log"),
         metrics=protected("{project_samples}/{sample}/metrics/{sample}.GCBiasMetrics.txt"),
-        chart="{project_samples}/{sample}/metrics/{sample}.GCBiasMetrics.pdf",
-        summary="{project_samples}/{sample}/metrics/{sample}.GCBiasMetricsSummary.txt"
+        chart=protected("{project_samples}/{sample}/metrics/{sample}.GCBiasMetrics.pdf"),
+        summary=protected("{project_samples}/{sample}/metrics/{sample}.GCBiasMetricsSummary.txt")
     threads: 4
     params:
         picard_jar = picard_jar
@@ -132,7 +132,7 @@ rule picard_wgs_metrics:
         genome_dict="{}.dict".format(project_genome)
     output:
         txt=protected("{project_samples}/{sample}/metrics/{sample}.WgsMetrics.txt"),
-        protected("{project_samples}/{sample}/logs/{sample}.WgsMetrics.log")
+        log=protected("{project_samples}/{sample}/logs/{sample}.WgsMetrics.log")
     threads: 4
     params:
         picard_jar = picard_jar
@@ -148,7 +148,7 @@ rule picard_alignment_summary:
         genome_dict="{}.dict".format(project_genome)
     output:
         txt=protected("{project_samples}/{sample}/metrics/{sample}.AlignmentSummaryMetrics.txt"),
-        log="{project_samples}/{sample}/logs/{sample}.AlignmentSummaryMetrics.log"
+        log=protected("{project_samples}/{sample}/logs/{sample}.AlignmentSummaryMetrics.log")
     threads: 4
     params:
         picard_jar = picard_jar
@@ -162,8 +162,8 @@ rule picard_size_metrics:
         marked_bai="{project_samples}/{sample}/{sample}.bam.bai",
     output:
         txt=protected("{project_samples}/{sample}/metrics/{sample}.InsertSizeMetrics.txt"),
-        pdf="{project_samples}/{sample}/metrics/{sample}.InsertSizeMetrics.pdf",
-        log="{project_samples}/{sample}/logs/{sample}.InsertSizeMetrics.log"
+        pdf=protected("{project_samples}/{sample}/metrics/{sample}.InsertSizeMetrics.pdf"),
+        log=protected("{project_samples}/{sample}/logs/{sample}.InsertSizeMetrics.log")
     params:
         picard_jar = picard_jar
     threads: 4
@@ -227,8 +227,8 @@ rule picard_mark_duplicates:
         sorted_bai="{project_samples}/{sample}/{sample}.sorted.bam.bai"
     output:
         marked_bam=protected("{project_samples}/{sample}/{sample}.bam"),
-        marked_metrics="{project_samples}/{sample}/metrics/{sample}.MarkDuplicates.txt",
-        marked_log="{project_samples}/{sample}/logs/{sample}.MarkDuplicates.log"
+        marked_metrics=protected("{project_samples}/{sample}/metrics/{sample}.MarkDuplicates.txt"),
+        marked_log=protected("{project_samples}/{sample}/logs/{sample}.MarkDuplicates.log")
     params:
         picard_jar=picard_jar
     threads: 20
