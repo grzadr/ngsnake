@@ -319,30 +319,11 @@ rule prepare_bwa_genome:
     shell:
         "bwa index -p {project_genome} {input}"
 
-# rule reads_forward_generate:
-#     input:
-#         lambda wildcards: sorted(samples_index[(wildcards.sample, "1")])
-#     output:
-#         "{project_samples}/{sample}/{sample}_1.fq.gz"
-#     threads: 5
-#     shell:
-#         "cat {input} > {output}"
-# 
-# rule reads_reverse_generate:
-#     input:
-#         lambda wildcards: sorted(samples_index[(wildcards.sample, "2")])
-#     output:
-#         "{project_samples}/{sample}/{sample}_2.fq.gz"
-#     threads: 5
-#     shell:
-#         "cat {input} > {output}"
-
 rule fastqc:
     input:
         "{project_samples}/{sample}/{sample}_{pair}.fq.gz"
     output:
-        "{project_samples}/{sample}/metrics/fastqc/\
-        {sample}_{pair}/{sample}_{pair}_fastqc.zip"
+        "{project_samples}/{sample}/metrics/fastqc/{sample}_{pair}/{sample}_{pair}_fastqc.zip",
     params:
         output_dir="{project_samples}/{sample}/metrics/fastqc/{sample}_{pair}"
     shell:
