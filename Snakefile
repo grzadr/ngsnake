@@ -28,7 +28,7 @@ print("Using Picard version {}".format(picard_jar))
 
 def reads_files_group():
     (dirs, ) = glob_wildcards(project_samples + "/{dir}")
-    dirs = [ele for ele in dirs if not ele.endswith("fq.gz")]
+    dirs = [ele for ele in dirs if "/" not in ele]
     print(dirs)
     return dirs
 
