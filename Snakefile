@@ -32,7 +32,7 @@ def reads_files_group():
 samples_names = reads_files_group()
 
 rule all:
-    "{project_main}/MultiQCReport/multiqc_report.html".format(project_main=project_main)
+    input="{project_main}/MultiQCReport/multiqc_report.html".format(project_main=project_main)
 
 rule multiqc:
     input:
