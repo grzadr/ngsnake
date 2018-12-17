@@ -3,7 +3,7 @@
 docker pull grzadr/biosak:mapping
 docker run -it \
   -v /etc/localtime:/etc/localtime:ro \
-  -v ~/DSD:/data \
+  -v ${1}:/data \
   -v ~/Git/Public/ngsnake/:/home/jovyan/map/ \
   -w /home/jovyan/map \
   -it \
