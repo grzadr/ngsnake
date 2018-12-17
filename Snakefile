@@ -10,9 +10,6 @@
 # Selected Picard command to implement
 # java -Xmx32g -jar /opt/conda/share/picard-2.18.16-0/picard.jar CollectHsMetrics I=CFA_615.bam O=CFA_615.hs_metrics.txt R=/data/OPUS/genome/CanFam3.1_Ensembl94.fa BAIT_INTERVALS=/data/OPUS/genome/CanFam3.1_Ensembl94.intervals TARGET_INTERVALS=/data/OPUS/genome/CanFam3.1_Ensembl94.intervals
 
-
-configfile: "config.yaml"
-
 project_main = config["project_dir"]
 project_reads = "/".join((project_main, config["reads_dir"]))
 project_genome = "/".join((project_main, config["genome_dir"], config["genome_prefix"]))
@@ -35,6 +32,9 @@ def reads_files_group():
 samples_names = reads_files_group()
 
 rule all:
+    "{project_main}/MultiQCReport/multiqc_report.html".format(project_main=project_main)
+
+rule multiqc:
     input:
         gc_bias_metrics=expand("{project_samples}/{sample}/metrics/"
                                "{sample}.GCBiasMetrics.txt",
@@ -65,10 +65,6 @@ rule all:
                         zip,
                         project_samples=[project_samples, ]*len(samples_names),
                         sample=sorted(samples_names)),
-        dup_stats=expand("{project_samples}/{sample}/metrics/{sample}.dup_stats",
-                         zip,
-                         project_samples=[project_samples, ]*len(samples_names),
-                         sample=sorted(samples_names)),
         stats=expand("{project_samples}/{sample}/metrics/{sample}.stats",
                      zip,
                      project_samples=[project_samples, ]*len(samples_names),
@@ -84,7 +80,7 @@ rule all:
                               sample=sorted(samples_names*2),
                               pair= reads_pairs * len(samples_names))
     output:
-        "{project_main}/MultiQCReport/multiqc_report.html".format(project_main=project_main)
+        "{project_main}/MultiQCReport/multiqc_report.html"
     params:
         output_dir="{project_main}/MultiQCReport/".format(project_main=project_main),
     shell:
@@ -181,7 +177,7 @@ rule samtools_stats:
         protected("{project_samples}/{sample}/metrics/{sample}.stats")
     threads: 1
     shell:
-        "samtools stats -d {input.marked_bam} > {output}"
+        "samtools stats {input.marked_bam} > {output}"
 
 rule samtools_idxstats:
     input:
@@ -193,16 +189,6 @@ rule samtools_idxstats:
     shell:
         "samtools idxstats {input.marked_bam} > {output}"
 
-rule samtools_dup_stats:
-    input:
-        marked_bam="{project_samples}/{sample}/{sample}.bam",
-        marked_bai="{project_samples}/{sample}/{sample}.bam.bai"
-    output:
-        protected("{project_samples}/{sample}/metrics/{sample}.dup_stats")
-    threads: 1
-    shell:
-        "samtools stats {input.marked_bam} > {output}"
-        
 rule samtools_flagstats:
     input:
         marked_bam="{project_samples}/{sample}/{sample}.bam",
@@ -212,7 +198,7 @@ rule samtools_flagstats:
     threads: 20
     shell:
         "samtools flagstat -@ {threads} {input.marked_bam} > {output}"
-        
+
 rule samtools_index_marked:
     input:
         "{project_samples}/{sample}/{sample}.bam"
@@ -221,7 +207,7 @@ rule samtools_index_marked:
     threads: 20
     shell:
         "samtools index -@ {threads} {input} {output}"
-    
+
 rule picard_mark_duplicates:
     input:
         sorted_bam="{project_samples}/{sample}/{sample}.sorted.bam",
@@ -238,7 +224,7 @@ rule picard_mark_duplicates:
          MarkDuplicates I={input.sorted_bam} \
          O={output.marked_bam} \
          M={output.marked_metrics} > {output.marked_log}"
-        
+
 rule samtools_index_sorted:
     input:
         "{project_samples}/{sample}/{sample}.sorted.bam"
