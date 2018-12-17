@@ -1,5 +1,0 @@
-project_dir: "/data"
-samples_dir: "samples"
-reads_dir: "reads"
-genome_dir: "genome"
-genome_prefix: "CanFam3.1.Ensembl.94"
