@@ -32,7 +32,8 @@ def reads_files_group():
 samples_names = reads_files_group()
 
 rule all:
-    input="{project_main}/MultiQCReport/multiqc_report.html".format(project_main=project_main)
+    input:
+        multiqc="{project_main}/MultiQCReport/multiqc_report.html".format(project_main=project_main)
 
 rule multiqc:
     input:
@@ -265,8 +266,8 @@ rule picard_add_metadata:
 
 rule bwa_map_reads:
     input:
-        reads_1="{project_samples}/{sample}/{sample}_1.fq.gz",
-        reads_2="{project_samples}/{sample}/{sample}_2.fq.gz",
+        reads_1=ancient("{project_samples}/{sample}/{sample}_1.fq.gz"),
+        reads_2=ancient("{project_samples}/{sample}/{sample}_2.fq.gz"),
         genome="{project_genome}.ann".format(project_genome=project_genome)
     output:
         temp("{project_samples}/{sample}/{sample}.missing.bam")
@@ -307,7 +308,7 @@ rule prepare_bwa_genome:
 
 rule fastqc:
     input:
-        "{project_samples}/{sample}/{sample}_{pair}.fq.gz"
+        ancient("{project_samples}/{sample}/{sample}_{pair}.fq.gz")
     output:
         "{project_samples}/{sample}/metrics/fastqc/{sample}_{pair}/{sample}_{pair}_fastqc.zip",
     params:
