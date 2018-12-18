@@ -13,6 +13,7 @@
 project_main = config["project_dir"]
 project_reads = "/".join((project_main, config["reads_dir"]))
 project_genome = "/".join((project_main, config["genome_dir"], config["genome_prefix"]))
+project_variants "/".join((project_main, config["variants_dir"], config["genome_prefix"]))
 project_samples =  "/".join((project_main, config["samples_dir"]))
 reads_pairs = ["1", "2"]
 
@@ -36,6 +37,100 @@ print(*samples_names, sep=", ")
 rule all:
     input:
         multiqc="{project_main}/MultiQCReport/multiqc_report.html".format(project_main=project_main)
+        gatk_recal=expand("{project_samples}/{sample}/recalibration/{sample}.recal.bam.bai",
+                          zip,
+                          project_samples=[project_samples, ]*len(samples_names),
+                          sample=sorted(samples_names))
+
+rule samtools_index_recal:
+    input:
+        "{project_samples}/{sample}/recalibration/{sample}.recal.bam"
+    output:
+        protected("{project_samples}/{sample}/recalibration/{sample}.recal.bam.bai")
+    threads: 20
+    shell:
+        "samtools index -@ {threads} {input} {output}"
+
+rule gatk_apply_BQSR:
+    input:
+        marked_bam="{project_samples}/{sample}/{sample}.bam",
+        marked_bai="{project_samples}/{sample}/{sample}.bai",
+        genome=ancient("{}.fa".format(project_genome)),
+        genome_dict=ancient("{}.dict".format(project_genome)),
+        recal="{project_samples}/{sample}/recalibration/{sample}.recal.1st.table"
+    output:
+        protected("{project_samples}/{sample}/recalibration/{sample}.recal.bam")
+    log:
+        protected("{project_samples}/{sample}/logs/{sample}.recal.log")
+    threads: 20
+    params:
+        memory="-Xmx160g"
+    shell:
+        "gatk  --java-options {params.memory} ApplyBQSR \
+        -R {input.genome} \
+        -I {input.marked_bam} \
+        -bqsr {input.recal} \
+        -O {output} \
+        -SQQ 10 -SQQ 15 -SQQ 20 -SQQ 25 -SQQ 30 -SQQ 35 -SQQ 40 -SQQ 45 -SQQ 50"
+
+rule gatk_recalibrate_analyze:
+    input:
+        recal_before="{project_samples}/{sample}/recalibration/{sample}.recal.1st.table",
+        recal_after="{project_samples}/{sample}/recalibration/{sample}.recal.2nd.table"
+    output:
+        protected("{project_samples}/{sample}/recalibration/{sample}.recal.pdf")
+    threads: 20
+    params:
+        memory="-Xmx160g"
+    shell:
+        "gatk --java-options {params.memory} AnalyzeCovariates \
+        -before {input.before} \
+        -after {input.after} \
+        -plots {output} > {log}"
+
+rule gatk_recalibrate_2nd:
+    input:
+        marked_bam="{project_samples}/{sample}/{sample}.bam",
+        marked_bai="{project_samples}/{sample}/{sample}.bai",
+        genome=ancient("{}.fa".format(project_genome)),
+        genome_dict=ancient("{}.dict".format(project_genome)),
+        variants=ancient("{}.vcf.gz".format(project_variants)),
+        recal_table="{project_samples}/{sample}/recalibration/{sample}.recal.1st.table"
+    output:
+        protected("{project_samples}/{sample}/recalibration/{sample}.recal.2nd.table")
+    log:
+        "{project_samples}/{sample}/logs/{sample}.recal.2nd.log"
+    threads: 20
+    params:
+        memory="-Xmx160g"
+    shell:
+        "gatk --java-options {params.memory} BaseRecalibrator \
+        -R {input.genome} \
+        -I {input.marked.bam} \
+        -knownSites {input.variants} \
+        –bqsr {input.recal_table} \
+        -O {output} > {log}"
+
+rule gatk_recalibrate_1st:
+    input:
+        marked_bam="{project_samples}/{sample}/{sample}.bam",
+        marked_bai="{project_samples}/{sample}/{sample}.bai",
+        genome=ancient("{}.fa".format(project_genome)),
+        genome_dict=ancient("{}.dict".format(project_genome)),
+        variants=ancient("{}.vcf.gz".format(project_variants))
+    output:
+        protected("{project_samples}/{sample}/recalibration/{sample}.recal.1st.table")
+    log:
+        "{project_samples}/{sample}/logs/{sample}.recal.1st.log"
+    threads: 20
+    params:
+        memory="-Xmx160g"
+    shell:
+        "gatk --java-options {params.memory} BaseRecalibrator \
+        -R {input.genome} \
+        -I {input.marked.bam} \
+        -knownSites {input.variants} \
+        -O {output} > {log}"
 
 rule multiqc:
     input:
@@ -81,7 +176,11 @@ rule multiqc:
                               zip,
                               project_samples=[project_samples, ]*len(samples_names)*2,
                               sample=sorted(samples_names*2),
-                              pair= reads_pairs * len(samples_names))
+                              pair= reads_pairs * len(samples_names)),
+        gatk_recal=expand("{project_samples}/{sample}/recalibration/{sample}.recal.pdf",
+                          zip,
+                          project_samples=[project_samples, ]*len(samples_names),
+                          sample=sorted(samples_names))
     output:
         "{project_main}/MultiQCReport/multiqc_report.html"
     log:
@@ -95,7 +194,8 @@ rule picard_validate_sam_file:
     input:
         marked_bam="{project_samples}/{sample}/{sample}.bam",
         marked_bai="{project_samples}/{sample}/{sample}.bai",
-        genome="{}.fa".format(project_genome)
+        genome="{}.fa".format(project_genome),
+        genome_dict="{}.dict".format(project_genome)
     output:
         txt=protected("{project_samples}/{sample}/metrics/{sample}.ValidateSamFile.txt")
     log:
