@@ -84,8 +84,8 @@ rule gatk_recalibrate_analyze:
         memory="-Xmx160g"
     shell:
         "gatk --java-options {params.memory} AnalyzeCovariates \
-        -before {input.before} \
-        -after {input.after} \
+        -before {input.recal_before} \
+        -after {input.recal_after} \
         -plots {output} > {log}"
 
 rule gatk_recalibrate_2nd:
@@ -106,7 +106,7 @@ rule gatk_recalibrate_2nd:
     shell:
         "gatk --java-options {params.memory} BaseRecalibrator \
         -R {input.genome} \
-        -I {input.marked.bam} \
+        -I {input.marked_bam} \
         -knownSites {input.variants} \
         –bqsr {input.recal_table} \
         -O {output} > {log}"
@@ -128,7 +128,7 @@ rule gatk_recalibrate_1st:
     shell:
         "gatk --java-options {params.memory} BaseRecalibrator \
         -R {input.genome} \
-        -I {input.marked.bam} \
+        -I {input.marked_bam} \
         -knownSites {input.variants} \
         -O {output} > {log}"
 
