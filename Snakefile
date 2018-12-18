@@ -26,10 +26,12 @@ print("Using Picard version {}".format(picard_jar))
 def reads_files_group():
     (dirs, ) = glob_wildcards(project_samples + "/{dir}")
     dirs = [ele for ele in dirs if "/" not in ele]
-    print(dirs)
     return dirs
 
 samples_names = reads_files_group()
+
+print("{} samples loaded".format(len(samples_names)))
+print(*samples_names, sep=", ")
 
 rule all:
     input:
@@ -82,10 +84,12 @@ rule multiqc:
                               pair= reads_pairs * len(samples_names))
     output:
         "{project_main}/MultiQCReport/multiqc_report.html"
+    log:
+        "{project_main}/logs/multiqc_report.log"
     params:
-        output_dir="{project_main}/MultiQCReport/".format(project_main=project_main),
+        output_dir="{project_main}/MultiQCReport/".format(project_main=project_main)
     shell:
-        "multiqc {project_samples} -o {params.output_dir}"
+        "multiqc {project_samples} -o {params.output_dir} > {log}"
 
 rule picard_validate_sam_file:
     input:
@@ -93,15 +97,16 @@ rule picard_validate_sam_file:
         marked_bai="{project_samples}/{sample}/{sample}.bai",
         genome="{}.fa".format(project_genome)
     output:
-        txt=protected("{project_samples}/{sample}/metrics/{sample}.ValidateSamFile.txt"),
-        log=protected("{project_samples}/{sample}/metrics/{sample}.ValidateSamFile.log")
+        txt=protected("{project_samples}/{sample}/metrics/{sample}.ValidateSamFile.txt")
+    log:
+        protected("{project_samples}/{sample}/metrics/{sample}.ValidateSamFile.log")
     threads: 4
     params:
         picard_jar = picard_jar
     shell:
         "java -Xmx32g -jar {params.picard_jar} ValidateSamFile \
         I={input.marked_bam} OUTPUT={output.txt} \
-        R={input.genome} MODE='VERBOSE' > {output.log}"
+        R={input.genome} MODE='VERBOSE' > {log}"
 
 rule picard_gc_bias_metrics:
     input:
@@ -110,17 +115,18 @@ rule picard_gc_bias_metrics:
         genome="{}.fa".format(project_genome),
         genome_dict="{}.dict".format(project_genome)
     output:
-        log=protected("{project_samples}/{sample}/logs/{sample}.GCBiasMetrics.log"),
         metrics=protected("{project_samples}/{sample}/metrics/{sample}.GCBiasMetrics.txt"),
         chart=protected("{project_samples}/{sample}/metrics/{sample}.GCBiasMetrics.pdf"),
         summary=protected("{project_samples}/{sample}/metrics/{sample}.GCBiasMetricsSummary.txt")
+    log:
+        protected("{project_samples}/{sample}/logs/{sample}.GCBiasMetrics.log")
     threads: 4
     params:
         picard_jar = picard_jar
     shell:
         "java -Xmx32g -jar {params.picard_jar} CollectGcBiasMetrics \
         R={input.genome} I={input.marked_bam} O={output.metrics} S={output.summary} \
-        CHART={output.chart} > {output.log}"
+        CHART={output.chart} > {log}"
 
 rule picard_wgs_metrics:
     input:
@@ -129,14 +135,15 @@ rule picard_wgs_metrics:
         genome="{}.fa".format(project_genome),
         genome_dict="{}.dict".format(project_genome)
     output:
-        txt=protected("{project_samples}/{sample}/metrics/{sample}.WgsMetrics.txt"),
-        log=protected("{project_samples}/{sample}/logs/{sample}.WgsMetrics.log")
+        txt=protected("{project_samples}/{sample}/metrics/{sample}.WgsMetrics.txt")
+    log:
+        protected("{project_samples}/{sample}/logs/{sample}.WgsMetrics.log")
     threads: 4
     params:
         picard_jar = picard_jar
     shell:
         "java -Xmx32g -jar {params.picard_jar} CollectWgsMetrics \
-        R={input.genome} I={input.marked_bam} O={output.txt} > {output.log}"
+        R={input.genome} I={input.marked_bam} O={output.txt} > {log}"
 
 rule picard_alignment_summary:
     input:
@@ -145,14 +152,15 @@ rule picard_alignment_summary:
         genome="{}.fa".format(project_genome),
         genome_dict="{}.dict".format(project_genome)
     output:
-        txt=protected("{project_samples}/{sample}/metrics/{sample}.AlignmentSummaryMetrics.txt"),
-        log=protected("{project_samples}/{sample}/logs/{sample}.AlignmentSummaryMetrics.log")
+        txt=protected("{project_samples}/{sample}/metrics/{sample}.AlignmentSummaryMetrics.txt")
+    log:
+        protected("{project_samples}/{sample}/logs/{sample}.AlignmentSummaryMetrics.log")
     threads: 4
     params:
         picard_jar = picard_jar
     shell:
         "java -Xmx32g -jar {params.picard_jar} CollectAlignmentSummaryMetrics \
-        R={input.genome} I={input.marked_bam} O={output.txt} > {output.log}"
+        R={input.genome} I={input.marked_bam} O={output.txt} > {log}"
 
 rule picard_size_metrics:
     input:
@@ -160,15 +168,16 @@ rule picard_size_metrics:
         marked_bai="{project_samples}/{sample}/{sample}.bam.bai",
     output:
         txt=protected("{project_samples}/{sample}/metrics/{sample}.InsertSizeMetrics.txt"),
-        pdf=protected("{project_samples}/{sample}/metrics/{sample}.InsertSizeMetrics.pdf"),
-        log=protected("{project_samples}/{sample}/logs/{sample}.InsertSizeMetrics.log")
+        pdf=protected("{project_samples}/{sample}/metrics/{sample}.InsertSizeMetrics.pdf")
+    log:
+        protected("{project_samples}/{sample}/logs/{sample}.InsertSizeMetrics.log")
     params:
         picard_jar = picard_jar
     threads: 4
     shell:
         "java -Xmx32g -jar {params.picard_jar} CollectInsertSizeMetrics \
         I={input.marked_bam} \
-        O={output.txt} H={output.pdf} M=0.5 > {output.log}"
+        O={output.txt} H={output.pdf} M=0.5 > {log}"
 
 rule samtools_stats:
     input:
@@ -215,8 +224,9 @@ rule picard_mark_duplicates:
         sorted_bai="{project_samples}/{sample}/{sample}.sorted.bam.bai"
     output:
         marked_bam=protected("{project_samples}/{sample}/{sample}.bam"),
-        marked_metrics=protected("{project_samples}/{sample}/metrics/{sample}.MarkDuplicates.txt"),
-        marked_log=protected("{project_samples}/{sample}/logs/{sample}.MarkDuplicates.log")
+        marked_metrics=protected("{project_samples}/{sample}/metrics/{sample}.MarkDuplicates.txt")
+    log:
+        protected("{project_samples}/{sample}/logs/{sample}.MarkDuplicates.log")
     params:
         picard_jar=picard_jar
     threads: 20
@@ -224,7 +234,7 @@ rule picard_mark_duplicates:
         "java -Xmx160g -jar {params.picard_jar} \
          MarkDuplicates I={input.sorted_bam} \
          O={output.marked_bam} \
-         M={output.marked_metrics} > {output.marked_log}"
+         M={output.marked_metrics} > {log}"
 
 rule samtools_index_sorted:
     input:
@@ -246,23 +256,23 @@ rule samtools_sort:
     shell:
         "samtools sort {input} -o {output} -@ {threads} -m {params.memory}"
 
-rule picard_add_metadata:
-    input:
-        "{project_samples}/{sample}/{sample}.missing.bam"
-    output:
-        temp("{project_samples}/{sample}/{sample}.unsorted.bam")
-    params:
-        picard_jar = picard_jar,
-        rgsm = "{sample}"
-    threads: 4
-    shell:
-        "java -Xmx32g -jar {params.picard_jar} AddOrReplaceReadGroups \
-        I={input} O={output} \
-        RGID={params.rgsm} \
-        RGSM={params.rgsm} \
-        RGPL=illumina \
-        RGLB={params.rgsm} \
-        RGPU={params.rgsm}"
+# rule picard_add_metadata:
+#     input:
+#         "{project_samples}/{sample}/{sample}.missing.bam"
+#     output:
+#         temp("{project_samples}/{sample}/{sample}.unsorted.bam")
+#     params:
+#         picard_jar = picard_jar,
+#         rgsm = "{sample}"
+#     threads: 4
+#     shell:
+#         "java -Xmx32g -jar {params.picard_jar} AddOrReplaceReadGroups \
+#         I={input} O={output} \
+#         RGID={params.rgsm} \
+#         RGSM={params.rgsm} \
+#         RGPL=illumina \
+#         RGLB={params.rgsm} \
+#         RGPU={params.rgsm}"
 
 rule bwa_map_reads:
     input:
@@ -270,10 +280,11 @@ rule bwa_map_reads:
         reads_2=ancient("{project_samples}/{sample}/{sample}_2.fq.gz"),
         genome="{project_genome}.ann".format(project_genome=project_genome)
     output:
-        temp("{project_samples}/{sample}/{sample}.missing.bam")
+        # temp("{project_samples}/{sample}/{sample}.missing.bam")
+        temp("{project_samples}/{sample}/{sample}.unsorted.bam")
     params:
         prefix="{project_genome}".format(project_genome=project_genome),
-        rg=r"@RG\tID:{sample}\tSM:{sample}"
+        rg=r"@RG\tID:{sample}\tSM:{sample}\tPL:illumina\tLB:{sample}\tPU:{sample}"
     threads:20
     log:
         "{project_samples}/{sample}/{sample}.bwa.log"
@@ -283,7 +294,7 @@ rule bwa_map_reads:
 
 rule prepare_genome_index:
     input:
-        "{project_genome}.fa"
+        ancient("{project_genome}.fa")
     output:
         faidx="{project_genome}.fa.fai",
         dict="{project_genome}.dict"
@@ -298,7 +309,7 @@ rule prepare_genome_index:
 
 rule prepare_bwa_genome:
     input:
-        "{project_genome}.fa"
+        ancient("{project_genome}.fa")
     output:
         "{project_genome}.ann"
     params:
