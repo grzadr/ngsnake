@@ -95,6 +95,7 @@ rule gatk_recalibrate_2nd:
         genome=ancient("{}.fa".format(project_genome)),
         genome_dict=ancient("{}.dict".format(project_genome)),
         variants=ancient("{}.vcf.gz".format(project_variants)),
+        variants_index=ancient("{}.vcf.idx".format(project_variants)),
         recal_table="{project_samples}/{sample}/recalibration/{sample}.recal.1st.table"
     output:
         protected("{project_samples}/{sample}/recalibration/{sample}.recal.2nd.table")
@@ -117,7 +118,8 @@ rule gatk_recalibrate_1st:
         marked_bai="{project_samples}/{sample}/{sample}.bam.bai",
         genome=ancient("{}.fa".format(project_genome)),
         genome_dict=ancient("{}.dict".format(project_genome)),
-        variants=ancient("{}.vcf.gz".format(project_variants))
+        variants=ancient("{}.vcf.gz".format(project_variants)),
+        variants_index=ancient("{}.vcf.idx".format(project_variants))
     output:
         protected("{project_samples}/{sample}/recalibration/{sample}.recal.1st.table")
     log:
@@ -130,6 +132,20 @@ rule gatk_recalibrate_1st:
         -R {input.genome} \
         -I {input.marked_bam} \
         -known-sites {input.variants} \
+        -O {output} > {log}"
+
+rule gatk_index_variants:
+    input:
+        "{}.vcf.gz".format(project_variants)
+    output:
+        "{}.vcf.idx".format(project_variants)
+    log:
+        "{}.log".format(project_variants)
+    params:
+        memory="-Xmx160g"
+    shell:
+        "gatk IndexFeatureFile \
+        -I {input} \
         -O {output} > {log}"
 
 rule multiqc:
