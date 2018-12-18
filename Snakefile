@@ -71,7 +71,11 @@ rule gatk_apply_BQSR:
         -I {input.marked_bam} \
         -bqsr {input.recal} \
         -O {output} \
-        -SQQ 10 -SQQ 15 -SQQ 20 -SQQ 25 -SQQ 30 -SQQ 35 -SQQ 40 -SQQ 45 -SQQ 50"
+        -SQQ 10 -SQQ 15 \
+        -SQQ 20 -SQQ 25 \
+        -SQQ 30 -SQQ 35 \
+        -SQQ 40 -SQQ 45 \
+        -SQQ 50 2> {log}"
 
 rule gatk_recalibrate_analyze:
     input:
@@ -86,7 +90,7 @@ rule gatk_recalibrate_analyze:
         "gatk --java-options '{params.memory}' AnalyzeCovariates \
         -before {input.recal_before} \
         -after {input.recal_after} \
-        -plots {output} > {log}"
+        -plots {output} 2> {log}"
 
 rule gatk_recalibrate_2nd:
     input:
@@ -110,7 +114,7 @@ rule gatk_recalibrate_2nd:
         -I {input.marked_bam} \
         -known-sites {input.variants} \
         –bqsr {input.recal_table} \
-        -O {output} > {log}"
+        -O {output} 2> {log}"
 
 rule gatk_recalibrate_1st:
     input:
@@ -132,7 +136,7 @@ rule gatk_recalibrate_1st:
         -R {input.genome} \
         -I {input.marked_bam} \
         -known-sites {input.variants} \
-        -O {output} > {log}"
+        -O {output} 2> {log}"
 
 rule gatk_index_variants:
     input:
@@ -146,7 +150,7 @@ rule gatk_index_variants:
     shell:
         "gatk IndexFeatureFile \
         -F {input} \
-        -O {output} > {log}"
+        -O {output} 2> {log}"
 
 rule multiqc:
     input:
