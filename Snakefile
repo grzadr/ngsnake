@@ -13,8 +13,8 @@
 project_main = config["project_dir"]
 project_reads = "/".join((project_main, config["reads_dir"]))
 project_genome = "/".join((project_main, config["genome_dir"], config["genome_prefix"]))
-project_variants "/".join((project_main, config["variants_dir"], config["genome_prefix"]))
-project_samples =  "/".join((project_main, config["samples_dir"]))
+project_variants = "/".join((project_main, config["variants_dir"], config["genome_prefix"]))
+project_samples = "/".join((project_main, config["samples_dir"]))
 reads_pairs = ["1", "2"]
 
 (picard_version) = glob_wildcards("/opt/conda/share/picard-{version}/picard.jar")
@@ -36,7 +36,7 @@ print(*samples_names, sep=", ")
 
 rule all:
     input:
-        multiqc="{project_main}/MultiQCReport/multiqc_report.html".format(project_main=project_main)
+        multiqc="{project_main}/MultiQCReport/multiqc_report.html".format(project_main=project_main),
         gatk_recal=expand("{project_samples}/{sample}/recalibration/{sample}.recal.bam.bai",
                           zip,
                           project_samples=[project_samples, ]*len(samples_names),
