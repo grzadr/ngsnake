@@ -54,7 +54,7 @@ rule samtools_index_recal:
 rule gatk_apply_BQSR:
     input:
         marked_bam="{project_samples}/{sample}/{sample}.bam",
-        marked_bai="{project_samples}/{sample}/{sample}.bai",
+        marked_bai="{project_samples}/{sample}/{sample}.bam.bai",
         genome=ancient("{}.fa".format(project_genome)),
         genome_dict=ancient("{}.dict".format(project_genome)),
         recal="{project_samples}/{sample}/recalibration/{sample}.recal.1st.table"
@@ -91,7 +91,7 @@ rule gatk_recalibrate_analyze:
 rule gatk_recalibrate_2nd:
     input:
         marked_bam="{project_samples}/{sample}/{sample}.bam",
-        marked_bai="{project_samples}/{sample}/{sample}.bai",
+        marked_bai="{project_samples}/{sample}/{sample}.bam.bai",
         genome=ancient("{}.fa".format(project_genome)),
         genome_dict=ancient("{}.dict".format(project_genome)),
         variants=ancient("{}.vcf.gz".format(project_variants)),
@@ -114,7 +114,7 @@ rule gatk_recalibrate_2nd:
 rule gatk_recalibrate_1st:
     input:
         marked_bam="{project_samples}/{sample}/{sample}.bam",
-        marked_bai="{project_samples}/{sample}/{sample}.bai",
+        marked_bai="{project_samples}/{sample}/{sample}.bam.bai",
         genome=ancient("{}.fa".format(project_genome)),
         genome_dict=ancient("{}.dict".format(project_genome)),
         variants=ancient("{}.vcf.gz".format(project_variants))
@@ -193,7 +193,7 @@ rule multiqc:
 rule picard_validate_sam_file:
     input:
         marked_bam="{project_samples}/{sample}/{sample}.bam",
-        marked_bai="{project_samples}/{sample}/{sample}.bai",
+        marked_bai="{project_samples}/{sample}/{sample}.bam.bai",
         genome="{}.fa".format(project_genome),
         genome_dict="{}.dict".format(project_genome)
     output:
