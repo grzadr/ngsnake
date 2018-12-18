@@ -66,7 +66,7 @@ rule gatk_apply_BQSR:
     params:
         memory="-Xmx160g"
     shell:
-        "gatk  --java-options {params.memory} ApplyBQSR \
+        "gatk  --java-options '{params.memory}' ApplyBQSR \
         -R {input.genome} \
         -I {input.marked_bam} \
         -bqsr {input.recal} \
@@ -83,7 +83,7 @@ rule gatk_recalibrate_analyze:
     params:
         memory="-Xmx160g"
     shell:
-        "gatk --java-options {params.memory} AnalyzeCovariates \
+        "gatk --java-options '{params.memory}' AnalyzeCovariates \
         -before {input.recal_before} \
         -after {input.recal_after} \
         -plots {output} > {log}"
@@ -104,10 +104,10 @@ rule gatk_recalibrate_2nd:
     params:
         memory="-Xmx160g"
     shell:
-        "gatk --java-options {params.memory} BaseRecalibrator \
+        "gatk --java-options '{params.memory}' BaseRecalibrator \
         -R {input.genome} \
         -I {input.marked_bam} \
-        -knownSites {input.variants} \
+        -known-sites {input.variants} \
         –bqsr {input.recal_table} \
         -O {output} > {log}"
 
@@ -126,10 +126,10 @@ rule gatk_recalibrate_1st:
     params:
         memory="-Xmx160g"
     shell:
-        "gatk --java-options {params.memory} BaseRecalibrator \
+        "gatk --java-options '{params.memory}' BaseRecalibrator \
         -R {input.genome} \
         -I {input.marked_bam} \
-        -knownSites {input.variants} \
+        -known-sites {input.variants} \
         -O {output} > {log}"
 
 rule multiqc:
