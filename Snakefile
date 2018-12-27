@@ -113,7 +113,7 @@ rule gatk_recalibrate_2nd:
         -R {input.genome} \
         -I {input.marked_bam} \
         -known-sites {input.variants} \
-        –bqsr {input.recal_table} \
+        –BQSR {input.recal_table} \
         -O {output} 2> {log}"
 
 rule gatk_recalibrate_1st:
