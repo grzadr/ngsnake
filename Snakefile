@@ -197,10 +197,10 @@ rule multiqc:
                               project_samples=[project_samples, ]*len(samples_names)*2,
                               sample=sorted(samples_names*2),
                               pair= reads_pairs * len(samples_names)),
-        gatk_recal=expand("{project_samples}/{sample}/recalibration/{sample}.recal.pdf",
-                          zip,
-                          project_samples=[project_samples, ]*len(samples_names),
-                          sample=sorted(samples_names))
+        # gatk_recal=expand("{project_samples}/{sample}/recalibration/{sample}.recal.pdf",
+        #                   zip,
+        #                   project_samples=[project_samples, ]*len(samples_names),
+        #                   sample=sorted(samples_names))
     output:
         "{project_main}/MultiQCReport/multiqc_report.html"
     log:
@@ -370,9 +370,9 @@ rule samtools_sort:
         "{project_samples}/{sample}/{sample}.unsorted.bam"
     output:
         temp("{project_samples}/{sample}/{sample}.sorted.bam")
-    threads: 20
+    threads: 10
     params:
-        memory="4G"
+        memory="2G"
     shell:
         "samtools sort {input} -o {output} -@ {threads} -m {params.memory}"
 
