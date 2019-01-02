@@ -11,4 +11,5 @@ docker run -it \
   -v ${PWD}:/home/jovyan/map/ \
   -w /home/jovyan/map \
   --name ngsnake \
+  --rm \
   grzadr/biosak:mapping snakemake --configfile /data/config.yaml -pr -j ${2} "${@:3}"
