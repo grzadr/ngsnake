@@ -304,10 +304,12 @@ rule samtools_stats:
         marked_bam="{project_samples}/{sample}/{sample}.bam",
         marked_bai="{project_samples}/{sample}/{sample}.bam.bai"
     output:
-        protected("{project_samples}/{sample}/metrics/{sample}.stats")
+        protected("{project_samples}/{sample}/metrics/{sample}.stats") 
+    log:
+        protected("{project_samples}/{sample}/logs/{sample}.stats.log")
     threads: 1
     shell:
-        "samtools stats {input.marked_bam} > {output}"
+        "(samtools stats {input.marked_bam} > {output}) 2> {log}"
 
 rule samtools_idxstats:
     input:
@@ -315,9 +317,11 @@ rule samtools_idxstats:
         marked_bai="{project_samples}/{sample}/{sample}.bam.bai"
     output:
         protected("{project_samples}/{sample}/metrics/{sample}.idxstats")
+    log:
+        protected("{project_samples}/{sample}/logs/{sample}.idxstats.log") 
     threads: 1
     shell:
-        "samtools idxstats {input.marked_bam} > {output}"
+        "(samtools idxstats {input.marked_bam} > {output}) 2> {log}"
 
 rule samtools_flagstats:
     input:
@@ -325,9 +329,11 @@ rule samtools_flagstats:
         marked_bai="{project_samples}/{sample}/{sample}.bam.bai"
     output:
         protected("{project_samples}/{sample}/metrics/{sample}.flagstats")
+    log:
+        protected("{project_samples}/{sample}/logs/{sample}.flagstats.log") 
     threads: 20
     shell:
-        "samtools flagstat -@ {threads} {input.marked_bam} > {output}"
+        "(samtools flagstat -@ {threads} {input.marked_bam} > {output}) 2> {log}"
 
 rule samtools_index_marked:
     input:
@@ -371,10 +377,11 @@ rule samtools_sort:
     output:
         temp("{project_samples}/{sample}/{sample}.sorted.bam")
     threads: 20
+    log: protected("{project_samples}/{sample}/logs/{sample}.sort.log")
     params:
         memory="2G"
     shell:
-        "samtools sort {input} -o {output} -@ {threads} -T /tmp/{wildcards.sample}"
+        "samtools sort {input} -o {output} -@ {threads} -T /tmp/{wildcards.sample} 2> {log}"
 
 rule bwa_map_reads:
     input:
@@ -389,7 +396,7 @@ rule bwa_map_reads:
         rg=r"@RG\tID:{sample}\tSM:{sample}\tPL:illumina\tLB:{sample}\tPU:{sample}"
     threads:20
     log:
-        "{project_samples}/{sample}/{sample}.bwa.log"
+        "{project_samples}/{sample}/logs/{sample}.bwa.log"
     shell:
         "(bwa mem -R '{params.rg}' -t {threads} {params.prefix} \
         {input.reads_1} {input.reads_2} | samtools view -Sb - > {output}) 2> {log}"

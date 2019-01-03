@@ -4,6 +4,7 @@
 docker pull grzadr/biosak:mapping
 docker run -it \
   -v /etc/localtime:/etc/localtime:ro \
+  --tmpfs /tmp:rw,exec,nosuid \
   -v ${1}:/data \
   -v ${PWD}:/home/jovyan/map \
   -w /home/jovyan/map \
