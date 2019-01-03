@@ -226,7 +226,7 @@ rule picard_validate_sam_file:
     shell:
         "java -Xmx32g -jar {params.picard_jar} ValidateSamFile \
         I={input.marked_bam} OUTPUT={output.txt} \
-        R={input.genome} MODE='VERBOSE' >2 {log}"
+        R={input.genome} MODE='VERBOSE' 2> {log}"
 
 rule picard_gc_bias_metrics:
     input:
@@ -246,7 +246,7 @@ rule picard_gc_bias_metrics:
     shell:
         "java -Xmx32g -jar {params.picard_jar} CollectGcBiasMetrics \
         R={input.genome} I={input.marked_bam} O={output.metrics} S={output.summary} \
-        CHART={output.chart} >2 {log}"
+        CHART={output.chart} 2> {log}"
 
 rule picard_wgs_metrics:
     input:
@@ -263,7 +263,7 @@ rule picard_wgs_metrics:
         picard_jar = picard_jar
     shell:
         "java -Xmx32g -jar {params.picard_jar} CollectWgsMetrics \
-        R={input.genome} I={input.marked_bam} O={output.txt} >2 {log}"
+        R={input.genome} I={input.marked_bam} O={output.txt} 2> {log}"
 
 rule picard_alignment_summary:
     input:
@@ -280,7 +280,7 @@ rule picard_alignment_summary:
         picard_jar = picard_jar
     shell:
         "java -Xmx32g -jar {params.picard_jar} CollectAlignmentSummaryMetrics \
-        R={input.genome} I={input.marked_bam} O={output.txt} >2 {log}"
+        R={input.genome} I={input.marked_bam} O={output.txt} 2> {log}"
 
 rule picard_size_metrics:
     input:
@@ -297,7 +297,7 @@ rule picard_size_metrics:
     shell:
         "java -Xmx32g -jar {params.picard_jar} CollectInsertSizeMetrics \
         I={input.marked_bam} \
-        O={output.txt} H={output.pdf} M=0.5 >2 {log}"
+        O={output.txt} H={output.pdf} M=0.5 2> {log}"
 
 rule samtools_stats:
     input:
@@ -354,7 +354,7 @@ rule picard_mark_duplicates:
         "java -Xmx160g -jar {params.picard_jar} \
          MarkDuplicates I={input.sorted_bam} \
          O={output.marked_bam} \
-         M={output.marked_metrics} >2 {log}"
+         M={output.marked_metrics} 2> {log}"
 
 rule samtools_index_sorted:
     input:
@@ -374,7 +374,7 @@ rule samtools_sort:
     params:
         memory="2G"
     shell:
-        "samtools sort {input} -o {output} -@ {threads} -m {params.memory}"
+        "samtools sort {input} -o {output} -@ {threads} -T /tmp/{wildcards.sample}"
 
 rule bwa_map_reads:
     input:

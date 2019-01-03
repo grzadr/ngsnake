@@ -10,6 +10,7 @@ docker run -it \
   -v ${1}:/data \
   -v ${PWD}:/home/jovyan/map/ \
   -w /home/jovyan/map \
-  --name ngsnake \
+  --name ngsnake_beta \
   --rm \
+  --tmpfs /tmp:rw,exec,nosuid \
   grzadr/biosak:mapping snakemake --configfile /data/config.yaml -pr -j ${2} "${@:3}"
