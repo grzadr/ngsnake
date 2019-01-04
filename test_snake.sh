@@ -1,8 +1,9 @@
 #!/bin/bash
 
-#cp ${PWD}/Snakefile ${1}/Snakefile
-docker pull grzadr/biosak:mapping
+-set eux
+
 docker run -it \
+  --pull \
   -v /etc/localtime:/etc/localtime:ro \
   --tmpfs /tmp:rw,exec,nosuid \
   -v ${1}:/data \
