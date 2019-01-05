@@ -211,9 +211,9 @@ rule picard_size_metrics:
         protected("{project_samples}/{sample}/logs/{sample}.InsertSizeMetrics.log")
     params:
         picard_jar = picard_jar
-    threads: 4
+    threads: 2
     resources:
-        mem_mb = 32768
+        mem_mb = 16384
     shell:
         "java -Xmx{resources.mem_mb} -jar {params.picard_jar} \
         CollectInsertSizeMetrics \
@@ -235,9 +235,9 @@ rule picard_alignment_summary:
         protected("{project_samples}/{sample}/logs/{sample}.AlignmentSummaryMetrics.log")
     params:
         picard_jar = picard_jar
-    threads: 4
+    threads: 2
     resources:
-        mem_mb = 32768
+        mem_mb = 16384
     shell:
         "java -Xmx{resources.mem_mb} -jar {params.picard_jar} \
         CollectAlignmentSummaryMetrics \
@@ -283,9 +283,9 @@ rule picard_gc_bias_metrics:
         protected("{project_samples}/{sample}/logs/{sample}.GCBiasMetrics.log")
     params:
         picard_jar = picard_jar
-    threads: 4
+    threads: 2
     resources:
-        mem_mb = 32768
+        mem_mb = 16384
     shell:
         "java -Xmx{resources.mem_mb} -jar {params.picard_jar} \
         CollectGcBiasMetrics \
@@ -305,9 +305,9 @@ rule picard_validate_sam_file:
         protected("{project_samples}/{sample}/metrics/{sample}.ValidateSamFile.log")
     params:
         picard_jar = picard_jar
-    threads: 4
+    threads: 2
     resources:
-        mem_mb = 32768
+        mem_mb = 16384
     shell:
         "java -Xmx{resources.mem_mb} -jar {params.picard_jar} \
         ValidateSamFile \
