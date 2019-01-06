@@ -387,13 +387,16 @@ rule samtools_index_recal:
         rules.gatk_apply_BQSR.output
     output:
         protected("{project_samples}/{sample}/recalibration/{sample}.recal.bam.bai")
+    params:
+        old_bai="{project_samples}/{sample}/recalibration/{sample}.recal.bai"
     threads: threads_max
     shell:
-        "samtools index -@ {threads} {input} {output}"
+        #"samtools index -@ {threads} {input} {output}"
+        "mv {params.old_bai} {output}"
 
 rule gatk_recalibrate_2nd:
     input:
-        recal_bam=rules.gatk.apply_BQSR.output,
+        recal_bam=rules.gatk_apply_BQSR.output,
         recal_bai=rules.samtools_index_recal.output,
         genome=ancient("{}.fa".format(project_genome)),
         genome_dict=ancient("{}.dict".format(project_genome)),
