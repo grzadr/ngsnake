@@ -128,7 +128,7 @@ rule samtools_index_sorted_bwa_map:
         "samtools index -@ {threads} {input} {output}"
 
 rule picard_mark_duplicates:
-    priority: 1000
+    priority: 900
     input:
         sorted_bam=rules.samtools_sort_bwa_map.output,
         sorted_bai=rules.samtools_index_sorted_bwa_map.output,
@@ -149,7 +149,7 @@ rule picard_mark_duplicates:
          M={output.marked_metrics} 2> {log}"
 
 rule samtools_index_marked:
-    priority: 1000
+    priority: 900
     input:
         rules.picard_mark_duplicates.output.marked_bam
     output:

@@ -2,13 +2,16 @@
 
 -set eux
 
+DOCKER_IMAGE = grzadr/biosak:mapping
+
+docker pull ${DOCKER_IMAGE}
 docker run -it \
-  --pull \
   -v /etc/localtime:/etc/localtime:ro \
   --tmpfs /tmp:rw,exec,nosuid \
   -v ${1}:/data \
   -v ${PWD}:/home/jovyan/map \
+  -v ${PWD}/Snakemake:/data/Snakemake \
   -w /home/jovyan/map \
   -it \
   --rm \
-  grzadr/biosak:mapping /bin/bash
+  ${DOCKER_IMAGE} /bin/bash
