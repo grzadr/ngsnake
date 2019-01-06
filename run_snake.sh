@@ -8,11 +8,10 @@ docker pull ${DOCKER_IMAGE}
 docker run -it \
   -v /etc/localtime:/etc/localtime:ro \
   -v ${1}:/data \
-  -v ${PWD}:/home/jovyan/map/ \
-  -v ${PWD}/Snakemake:/data/Snakemake \
+  -v ${PWD}:/ngsnake \
   -w /data \
-  --name ngsnake_beta \
+  --name ngsnake_mapping \
   --rm \
   --tmpfs /tmp:rw,exec,nosuid \
   ${DOCKER_IMAGE} \
-  snakemake -s ~/map/Snakefile --configfile /data/config.yaml -pr -j ${2} "${@:3}"
+  snakemake -s /ngsnake/Snakefile --resources mem_mb=196608 --configfile /data/config.yaml -pr -j ${2} "${@:3}"

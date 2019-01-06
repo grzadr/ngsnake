@@ -34,6 +34,8 @@ samples_names = reads_files_group()
 print("{} samples loaded".format(len(samples_names)))
 print(*samples_names, sep=", ")
 
+threads_max = config["threads"]
+
 rule fastqc:
     input:
         ancient("{project_samples}/{sample}/{sample}_{pair}.fq.gz")
@@ -47,18 +49,18 @@ rule fastqc:
 
 rule prepare_genome_index:
     input:
-        ancient("{project_genome}.fa")
+        ancient(project_genome + ".fa")
     output:
-        protected("{project_genome}.fa.fai")
+        protected(project_genome + ".fa.fai")
     run:
         "samtools faidx {input} -o {output}"
 
 rule prepare_genome_dictionary:
     input:
-        fa=ancient("{project_genome}.fa"),
+        fa=ancient(project_genome + ".fa"),
         fai=rules.prepare_genome_index.output
     output:
-        protected("{project_genome}.dict")
+        protected(project_genome + ".dict")
     params:
         picard_jar = picard_jar
     threads: 1
@@ -68,16 +70,16 @@ rule prepare_genome_dictionary:
 
 rule prepare_bwa_genome:
     input:
-        ancient("{project_genome}.fa")
+        ancient(project_genome + ".fa")
     output:
-        amb=protected("{project_genome}.amb"),
-        ann=protected("{project_genome}.ann"),
-        bwt=protected("{project_genome}.bwt"),
-        pac=protected("{project_genome}.pac"),
-        sa=protected("{project_genome}.sa")
+        amb=protected(project_genome + ".amb"),
+        ann=protected(project_genome + ".ann"),
+        bwt=protected(project_genome + ".bwt"),
+        pac=protected(project_genome + ".pac"),
+        sa=protected(project_genome + ".sa")
     threads: 1
     shell:
-        "bwa index -p {project_genome} {input}"
+        "bwa index -p " + project_genome + " {input}"
 
 rule bwa_map_reads:
     priority: 1000
@@ -90,7 +92,7 @@ rule bwa_map_reads:
     log:
         protected("{project_samples}/{sample}/logs/{sample}.bwa.log")
     params:
-        prefix="{project_genome}".format(project_genome=project_genome),
+        prefix=project_genome,
         rg=r"@RG\tID:{sample}\tSM:{sample}\tPL:illumina\tLB:{sample}\tPU:{sample}"
     threads: threads_max
     shell:
@@ -107,12 +109,12 @@ rule samtools_sort_bwa_map:
         protected("{project_samples}/{sample}/logs/{sample}.sort_bwa_map.log")
     threads: threads_max
     resources:
-        mem_mb="4096M"
+        mem_mb=4096
     shell:
         "samtools sort {input} \
         -o {output} \
         -@ {threads} \
-        -m {resources.mem_mb} \
+        -m {resources.mem_mb}M \
         -T /tmp/{wildcards.sample} 2> {log}"
 
 rule samtools_index_sorted_bwa_map:
@@ -141,9 +143,9 @@ rule picard_mark_duplicates:
         picard_jar=picard_jar
     threads: threads_max
     resources:
-        mem_mb = "196608M"
+        mem_mb = 196608
     shell:
-        "java -Xmx{resources.mem_mb} -jar {params.picard_jar} \
+        "java -Xmx{resources.mem_mb}m -jar {params.picard_jar} \
          MarkDuplicates I={input.sorted_bam} \
          O={output.marked_bam} \
          M={output.marked_metrics} 2> {log}"
@@ -215,7 +217,7 @@ rule picard_size_metrics:
     resources:
         mem_mb = 16384
     shell:
-        "java -Xmx{resources.mem_mb} -jar {params.picard_jar} \
+        "java -Xmx{resources.mem_mb}m -jar {params.picard_jar} \
         CollectInsertSizeMetrics \
         I={input.marked_bam} \
         O={output.txt} \
@@ -226,8 +228,8 @@ rule picard_alignment_summary:
     priority: 500
     input:
         marked_bam=rules.picard_mark_duplicates.output.marked_bam,
-        marked_bai=rules.samtools_index_marked.output
-        genome=ancient("{project_genome}.fa"),
+        marked_bai=rules.samtools_index_marked.output,
+        genome=ancient(project_genome + ".fa"),
         genome_dict=rules.prepare_genome_dictionary.output
     output:
         txt=protected("{project_samples}/{sample}/metrics/{sample}.AlignmentSummaryMetrics.txt")
@@ -239,7 +241,7 @@ rule picard_alignment_summary:
     resources:
         mem_mb = 16384
     shell:
-        "java -Xmx{resources.mem_mb} -jar {params.picard_jar} \
+        "java -Xmx{resources.mem_mb}m -jar {params.picard_jar} \
         CollectAlignmentSummaryMetrics \
         R={input.genome} \
         I={input.marked_bam} \
@@ -249,8 +251,8 @@ rule picard_wgs_metrics:
     priority: 500
     input:
         marked_bam=rules.picard_mark_duplicates.output.marked_bam,
-        marked_bai=rules.samtools_index_marked.output
-        genome=ancient("{project_genome}.fa"),
+        marked_bai=rules.samtools_index_marked.output,
+        genome=ancient(project_genome + ".fa"),
         genome_dict=rules.prepare_genome_dictionary.output
     output:
         txt=protected("{project_samples}/{sample}/metrics/{sample}.WgsMetrics.txt")
@@ -262,7 +264,7 @@ rule picard_wgs_metrics:
     resources:
         mem_mb = 32768
     shell:
-        "java -Xmx{resources.mem_mb} -jar {params.picard_jar} \
+        "java -Xmx{resources.mem_mb}m -jar {params.picard_jar} \
         CollectWgsMetrics \
         R={input.genome} \
         I={input.marked_bam} \
@@ -272,8 +274,8 @@ rule picard_gc_bias_metrics:
     priority: 500
     input:
         marked_bam=rules.picard_mark_duplicates.output.marked_bam,
-        marked_bai=rules.samtools_index_marked.output
-        genome=ancient("{project_genome}.fa"),
+        marked_bai=rules.samtools_index_marked.output,
+        genome=ancient(project_genome + ".fa"),
         genome_dict=rules.prepare_genome_dictionary.output
     output:
         metrics=protected("{project_samples}/{sample}/metrics/{sample}.GCBiasMetrics.txt"),
@@ -287,7 +289,7 @@ rule picard_gc_bias_metrics:
     resources:
         mem_mb = 16384
     shell:
-        "java -Xmx{resources.mem_mb} -jar {params.picard_jar} \
+        "java -Xmx{resources.mem_mb}m -jar {params.picard_jar} \
         CollectGcBiasMetrics \
         R={input.genome} I={input.marked_bam} O={output.metrics} S={output.summary} \
         CHART={output.chart} 2> {log}"
@@ -296,8 +298,8 @@ rule picard_validate_sam_file:
     priority: 500
     input:
         marked_bam=rules.picard_mark_duplicates.output.marked_bam,
-        marked_bai=rules.samtools_index_marked.output
-        genome=ancient("{project_genome}.fa"),
+        marked_bai=rules.samtools_index_marked.output,
+        genome=ancient(project_genome + ".fa"),
         genome_dict=rules.prepare_genome_dictionary.output
     output:
         txt=protected("{project_samples}/{sample}/metrics/{sample}.ValidateSamFile.txt")
@@ -309,7 +311,7 @@ rule picard_validate_sam_file:
     resources:
         mem_mb = 16384
     shell:
-        "java -Xmx{resources.mem_mb} -jar {params.picard_jar} \
+        "java -Xmx{resources.mem_mb}m -jar {params.picard_jar} \
         ValidateSamFile \
         I={input.marked_bam} OUTPUT={output.txt} \
         R={input.genome} MODE='VERBOSE' 2> {log}"
@@ -359,10 +361,10 @@ rule multiqc:
                               project_samples=[project_samples, ]*len(samples_names)*2,
                               sample=sorted(samples_names*2),
                               pair= reads_pairs * len(samples_names)),
-        # gatk_recal=expand("{project_samples}/{sample}/recalibration/{sample}.recal.pdf",
-        #                   zip,
-        #                   project_samples=[project_samples, ]*len(samples_names),
-        #                   sample=sorted(samples_names))
+        gatk_recal=expand("{project_samples}/{sample}/recalibration/{sample}.recal.pdf",
+                           zip,
+                           project_samples=[project_samples, ]*len(samples_names),
+                           sample=sorted(samples_names))
     output:
         "{project_main}/MultiQCReport/multiqc_report.html"
     log:
@@ -379,8 +381,6 @@ rule gatk_index_variants:
         "{}.vcf.gz.tbi".format(project_variants)
     log:
         "{}.log".format(project_variants)
-    params:
-        memory="-Xmx160g"
     shell:
         "gatk IndexFeatureFile \
         -F {input} \
@@ -388,8 +388,8 @@ rule gatk_index_variants:
 
 rule gatk_recalibrate_1st:
     input:
-        marked_bam="{project_samples}/{sample}/{sample}.bam",
-        marked_bai="{project_samples}/{sample}/{sample}.bam.bai",
+        marked_bam=rules.picard_mark_duplicates.output.marked_bam,
+        marked_bai=rules.samtools_index_marked.output,
         genome=ancient("{}.fa".format(project_genome)),
         genome_dict=ancient("{}.dict".format(project_genome)),
         variants=ancient("{}.vcf.gz".format(project_variants)),
@@ -398,38 +398,78 @@ rule gatk_recalibrate_1st:
         protected("{project_samples}/{sample}/recalibration/{sample}.recal.1st.table")
     log:
         "{project_samples}/{sample}/logs/{sample}.recal.1st.log"
-    threads: 20
-    params:
-        memory="-Xmx160g"
+    threads: threads_max
+    resources:
+        mem_mb=196608
     shell:
-        "gatk --java-options '{params.memory}' BaseRecalibrator \
+        "gatk --java-options '-Xmx{resources.mem_mb}m' BaseRecalibrator \
         -R {input.genome} \
         -I {input.marked_bam} \
         -known-sites {input.variants} \
         -O {output} 2> {log}"
 
+rule gatk_apply_BQSR:
+    priority: 800
+    input:
+        marked_bam=rules.picard_mark_duplicates.output.marked_bam,
+        marked_bai=rules.samtools_index_marked.output,
+        genome=ancient("{}.fa".format(project_genome)),
+        genome_dict=ancient("{}.dict".format(project_genome)),
+        recal=rules.gatk_recalibrate_1st.output
+    output:
+        protected("{project_samples}/{sample}/recalibration/{sample}.recal.bam")
+    log:
+        protected("{project_samples}/{sample}/logs/{sample}.recal.log")
+    threads: 2
+    resources:
+        mem_mb=16384
+    shell:
+        "gatk  --java-options '-Xmx{resources.mem_mb}m' ApplyBQSR \
+        -R {input.genome} \
+        -I {input.marked_bam} \
+        -bqsr {input.recal} \
+        -O {output} \
+        --static-quantized-quals 10 \
+        --static-quantized-quals 15 \
+        --static-quantized-quals 20 \
+        --static-quantized-quals 25 \
+        --static-quantized-quals 30 \
+        --static-quantized-quals 35 \
+        --static-quantized-quals 40 \
+        --static-quantized-quals 45 \
+        --static-quantized-quals 50"
+
+rule samtools_index_recal:
+    priority: 800
+    input:
+        rules.gatk_apply_BQSR.output
+    output:
+        protected("{project_samples}/{sample}/recalibration/{sample}.recal.bam.bai")
+    threads: threads_max
+    shell:
+        "samtools index -@ {threads} {input} {output}"
+
 rule gatk_recalibrate_2nd:
     input:
-        marked_bam="{project_samples}/{sample}/{sample}.bam",
-        marked_bai="{project_samples}/{sample}/{sample}.bam.bai",
+        recal_bam=rules.gatk.apply_BQSR.output,
+        recal_bai=rules.samtools_index_recal.output,
         genome=ancient("{}.fa".format(project_genome)),
         genome_dict=ancient("{}.dict".format(project_genome)),
         variants=ancient("{}.vcf.gz".format(project_variants)),
         variants_index=ancient("{}.vcf.gz.tbi".format(project_variants)),
-        recal_table="{project_samples}/{sample}/recalibration/{sample}.recal.1st.table"
+        recal_table=rules.gatk_recalibrate_1st.output
     output:
         protected("{project_samples}/{sample}/recalibration/{sample}.recal.2nd.table")
     log:
         "{project_samples}/{sample}/logs/{sample}.recal.2nd.log"
-    threads: 20
-    params:
-        memory="-Xmx160g"
+    threads: 2
+    resources:
+        mem_mb=16384
     shell:
-        "gatk --java-options '{params.memory}' BaseRecalibrator \
+        "gatk --java-options '-Xmx{resources.mem_mb}m' BaseRecalibrator \
         -R {input.genome} \
-        -I {input.marked_bam} \
+        -I {input.recal_bam} \
         -known-sites {input.variants} \
-        –BQSR {input.recal_table} \
         -O {output} 2> {log}"
 
 rule gatk_recalibrate_analyze:
@@ -438,49 +478,14 @@ rule gatk_recalibrate_analyze:
         recal_after="{project_samples}/{sample}/recalibration/{sample}.recal.2nd.table"
     output:
         protected("{project_samples}/{sample}/recalibration/{sample}.recal.pdf")
-    threads: 20
-    params:
-        memory="-Xmx160g"
+    threads: 2
+    resources:
+        mem_mb=16384
     shell:
-        "gatk --java-options '{params.memory}' AnalyzeCovariates \
+        "gatk --java-options '-Xmx{resources.mem_mb}' AnalyzeCovariates \
         -before {input.recal_before} \
         -after {input.recal_after} \
         -plots {output} 2> {log}"
-
-rule gatk_apply_BQSR:
-    input:
-        marked_bam="{project_samples}/{sample}/{sample}.bam",
-        marked_bai="{project_samples}/{sample}/{sample}.bam.bai",
-        genome=ancient("{}.fa".format(project_genome)),
-        genome_dict=ancient("{}.dict".format(project_genome)),
-        recal="{project_samples}/{sample}/recalibration/{sample}.recal.1st.table"
-    output:
-        protected("{project_samples}/{sample}/recalibration/{sample}.recal.bam")
-    log:
-        protected("{project_samples}/{sample}/logs/{sample}.recal.log")
-    threads: 20
-    params:
-        memory="-Xmx160g"
-    shell:
-        "gatk  --java-options '{params.memory}' ApplyBQSR \
-        -R {input.genome} \
-        -I {input.marked_bam} \
-        -bqsr {input.recal} \
-        -O {output} \
-        -SQQ 10 -SQQ 15 \
-        -SQQ 20 -SQQ 25 \
-        -SQQ 30 -SQQ 35 \
-        -SQQ 40 -SQQ 45 \
-        -SQQ 50 2> {log}"
-
-rule samtools_index_recal:
-    input:
-        "{project_samples}/{sample}/recalibration/{sample}.recal.bam"
-    output:
-        protected("{project_samples}/{sample}/recalibration/{sample}.recal.bam.bai")
-    threads: 20
-    shell:
-        "samtools index -@ {threads} {input} {output}"
 
 rule all:
     input:
