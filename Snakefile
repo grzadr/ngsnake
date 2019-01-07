@@ -328,7 +328,7 @@ rule gatk_index_variants:
         -F {input} \
         -O {output} 2> {log}"
 
-rule gatk_recalibrate_1st:
+rule gatk_recalibrate_primary:
     input:
         marked_bam=rules.picard_mark_duplicates.output.marked_bam,
         marked_bai=rules.samtools_index_marked.output,
@@ -337,12 +337,12 @@ rule gatk_recalibrate_1st:
         variants=ancient("{}.vcf.gz".format(project_variants)),
         variants_index=ancient("{}.vcf.gz.tbi".format(project_variants))
     output:
-        protected("{project_samples}/{sample}/recalibration/{sample}.recal.1st.table")
+        protected("{project_samples}/{sample}/recalibration/{sample}.BaseRecalibrator.primary.grp")
     log:
-        "{project_samples}/{sample}/logs/{sample}.recal.1st.log"
-    threads: threads_max
+        "{project_samples}/{sample}/logs/{sample}.BaseRecalibrator.primary.log"
+    threads: 2
     resources:
-        mem_mb=196608
+        mem_mb=16384
     shell:
         "gatk --java-options '-Xmx{resources.mem_mb}m' BaseRecalibrator \
         -R {input.genome} \
@@ -357,11 +357,11 @@ rule gatk_apply_BQSR:
         marked_bai=rules.samtools_index_marked.output,
         genome=ancient("{}.fa".format(project_genome)),
         genome_dict=ancient("{}.dict".format(project_genome)),
-        recal=rules.gatk_recalibrate_1st.output
+        recal=rules.gatk_recalibrate_primary.output
     output:
-        protected("{project_samples}/{sample}/recalibration/{sample}.recal.bam")
+        protected("{project_samples}/{sample}/recalibration/{sample}.recalibrated.bam")
     log:
-        protected("{project_samples}/{sample}/logs/{sample}.recal.log")
+        protected("{project_samples}/{sample}/logs/{sample}.ApplyBQSR.log")
     threads: 2
     resources:
         mem_mb=16384
@@ -386,15 +386,15 @@ rule samtools_index_recal:
     input:
         rules.gatk_apply_BQSR.output
     output:
-        protected("{project_samples}/{sample}/recalibration/{sample}.recal.bam.bai")
+        protected("{project_samples}/{sample}/recalibration/{sample}.recalibrated.bam.bai")
     params:
-        old_bai="{project_samples}/{sample}/recalibration/{sample}.recal.bai"
+        old_bai="{project_samples}/{sample}/recalibration/{sample}.recalibrated.bai"
     threads: threads_max
     shell:
         #"samtools index -@ {threads} {input} {output}"
         "mv {params.old_bai} {output}"
 
-rule gatk_recalibrate_2nd:
+rule gatk_recalibrate_secondary:
     input:
         recal_bam=rules.gatk_apply_BQSR.output,
         recal_bai=rules.samtools_index_recal.output,
@@ -402,11 +402,11 @@ rule gatk_recalibrate_2nd:
         genome_dict=ancient("{}.dict".format(project_genome)),
         variants=ancient("{}.vcf.gz".format(project_variants)),
         variants_index=ancient("{}.vcf.gz.tbi".format(project_variants)),
-        recal_table=rules.gatk_recalibrate_1st.output
+        recal_table=rules.gatk_recalibrate_primary.output
     output:
-        protected("{project_samples}/{sample}/recalibration/{sample}.recal.2nd.table")
+        protected("{project_samples}/{sample}/recalibration/{sample}.BaseRecalibrator.secondary.grp")
     log:
-        "{project_samples}/{sample}/logs/{sample}.recal.2nd.log"
+        "{project_samples}/{sample}/logs/{sample}.BaseRecalibrator.secondary.log"
     threads: 2
     resources:
         mem_mb=16384
@@ -419,10 +419,10 @@ rule gatk_recalibrate_2nd:
 
 rule gatk_recalibrate_analyze:
     input:
-        recal_before="{project_samples}/{sample}/recalibration/{sample}.recal.1st.table",
-        recal_after="{project_samples}/{sample}/recalibration/{sample}.recal.2nd.table"
+        recal_before=rules.gatk_recalibrate_primary.output,
+        recal_after=rules.gatk_recalibrate_secondary.output
     output:
-        protected("{project_samples}/{sample}/recalibration/{sample}.recal.pdf")
+        protected("{project_samples}/{sample}/recalibration/{sample}.BaseRecalibrator.pdf")
     log:
         "{project_samples}/{sample}/logs/{sample}.BaseRecalibrator.AnalyzeCovariates.log"
     threads: 2
@@ -479,7 +479,7 @@ rule multiqc:
                               project_samples=[project_samples, ]*len(samples_names)*2,
                               sample=sorted(samples_names*2),
                               pair= reads_pairs * len(samples_names)),
-        gatk_recal=expand("{project_samples}/{sample}/recalibration/{sample}.recal.pdf",
+        gatk_recal=expand("{project_samples}/{sample}/recalibration/{sample}.BaseRecalibrator.pdf",
                            zip,
                            project_samples=[project_samples, ]*len(samples_names),
                            sample=sorted(samples_names))
