@@ -86,7 +86,7 @@ rule bwa_map_reads:
     input:
         reads_1=ancient("{project_samples}/{sample}/{sample}_1.fq.gz"),
         reads_2=ancient("{project_samples}/{sample}/{sample}_2.fq.gz"),
-        genome=rules.prepare_bwa_genome.output
+        genome=ancient(rules.prepare_bwa_genome.output)
     output:
         temp("{project_samples}/{sample}/{sample}.unsorted.bam")
     log:
@@ -433,6 +433,48 @@ rule gatk_recalibrate_analyze:
         -before {input.recal_before} \
         -after {input.recal_after} \
         -plots {output} 2> {log}"
+rule gatk_haplotype_caller:
+    input:
+        recal_bam=rules.gatk_apply_BQSR.output,
+        recal_bai=rules.samtools_index_recal.output,
+        genome=ancient("{}.fa".format(project_genome)),
+        genome_dict=ancient("{}.dict".format(project_genome)),
+        variants=ancient("{}.vcf.gz".format(project_variants)),
+        variants_index=ancient("{}.vcf.gz.tbi".format(project_variants)),
+    output:
+        protected("{project_samples}/{sample}/variants/{sample}.g.vcf")
+    log:
+        "{project_samples}/{sample}/logs/{sample}.HaplotypeCaller.log"
+    params:
+        annotaion="--annotation-group AS_StandardAnnotation \
+         --annotation-group OrientationBiasMixtureModelAnnotation \
+         --annotation-group ReducibleAnnotation \
+         --annotation-group StandardAnnotation \
+         --annotation-group StandardHCAnnotation",
+        max_reads=config["gatk_max_reads"],
+        report_num_alleles=config["gatk_report_num_alleles"],
+        max_num_alleles=config["gatk_max_num_alleles"],
+        all_sites_pls=config["gatk_all_sites_pls"],
+        max_assembly_size=config["gatk_max_assembly_size"],
+        assembly_padding=config["gatk_assembly_padding"]
+    threads: threads_max
+    resources:
+        mem_mb=196608
+    shell:
+         "gatk --java-options '-Xmx{resources.mem_mb}m' HaplotypeCaller \
+         -I {input.recal_bam} \
+         -R {input.genome} \
+         -O {output} \
+         –ERC GVCF \
+         --dbsnp {input.variants} \
+         --max-reads-per-alignment-start {params.max_reads} \
+         --annotate-with-num-discovered-alleles {params.report_num_alleles} \
+         --max-alternate-alleles {params.max_num_alleles} \
+         --max-assembly-region-size {params.max_assembly_size} \
+         --assembly-region-padding {params.assembly_padding} \
+         --all-sites-pls {params.all_sites_pls} \
+         {params.annotation} \
+         2> {log}"
 
 rule multiqc:
     input:
