@@ -17,6 +17,8 @@ project_variants = "/".join((project_main, config["variants_dir"], config["genom
 project_samples = "/".join((project_main, config["samples_dir"]))
 reads_pairs = ["1", "2"]
 
+variants_dir = "/".join((project_main, config["variants_dir"]))
+
 (picard_version) = glob_wildcards("/opt/conda/share/picard-{version}/picard.jar")
 if not len(picard_version.version):
     raise ValueError("no Picard jar file found")
@@ -35,6 +37,7 @@ print("{} samples loaded".format(len(samples_names)))
 print(*samples_names, sep=", ")
 
 threads_max = config["threads"]
+memory_max = config["memory_max"]
 
 rule fastqc:
     input:
@@ -82,7 +85,7 @@ rule prepare_bwa_genome:
         "bwa index -p " + project_genome + " {input}"
 
 rule bwa_map_reads:
-    priority: 1000
+    priority: 2000
     input:
         reads_1=ancient("{project_samples}/{sample}/{sample}_1.fq.gz"),
         reads_2=ancient("{project_samples}/{sample}/{sample}_2.fq.gz"),
@@ -100,7 +103,7 @@ rule bwa_map_reads:
         {input.reads_1} {input.reads_2} | samtools view -Sb - > {output}) 2> {log}"
 
 rule samtools_sort_bwa_map:
-    priority: 1000
+    priority: 2000
     input:
         rules.bwa_map_reads.output
     output:
@@ -118,7 +121,7 @@ rule samtools_sort_bwa_map:
         -T /tmp/{wildcards.sample} 2> {log}"
 
 rule samtools_index_sorted_bwa_map:
-    priority: 1000
+    priority: 2000
     input:
         rules.samtools_sort_bwa_map.output
     output:
@@ -130,7 +133,7 @@ rule samtools_index_sorted_bwa_map:
         "samtools index -@ {threads} {input} {output}"
 
 rule picard_mark_duplicates:
-    priority: 900
+    priority: 1900
     input:
         sorted_bam=rules.samtools_sort_bwa_map.output,
         sorted_bai=rules.samtools_index_sorted_bwa_map.output,
@@ -143,7 +146,7 @@ rule picard_mark_duplicates:
         picard_jar=picard_jar
     threads: threads_max
     resources:
-        mem_mb = 196608
+        mem_mb = memory_max
     shell:
         "java -Xmx{resources.mem_mb}m -jar {params.picard_jar} \
          MarkDuplicates I={input.sorted_bam} \
@@ -151,7 +154,7 @@ rule picard_mark_duplicates:
          M={output.marked_metrics} 2> {log}"
 
 rule samtools_index_marked:
-    priority: 900
+    priority: 1900
     input:
         rules.picard_mark_duplicates.output.marked_bam
     output:
@@ -163,7 +166,7 @@ rule samtools_index_marked:
         "samtools index -@ {threads} {input} {output}"
 
 rule samtools_flagstats:
-    priority: 750
+    priority: 1750
     input:
         marked_bam=rules.picard_mark_duplicates.output.marked_bam,
         marked_bai=rules.samtools_index_marked.output
@@ -176,7 +179,7 @@ rule samtools_flagstats:
         "(samtools flagstat -@ {threads} {input.marked_bam} > {output}) 2> {log}"
 
 rule samtools_idxstats:
-    priority: 750
+    priority: 1250
     input:
         marked_bam=rules.picard_mark_duplicates.output.marked_bam,
         marked_bai=rules.samtools_index_marked.output
@@ -189,7 +192,7 @@ rule samtools_idxstats:
         "(samtools idxstats {input.marked_bam} > {output}) 2> {log}"
 
 rule samtools_stats:
-    priority: 750
+    priority: 1250
     input:
         marked_bam=rules.picard_mark_duplicates.output.marked_bam,
         marked_bai=rules.samtools_index_marked.output
@@ -202,7 +205,7 @@ rule samtools_stats:
         "(samtools stats {input.marked_bam} > {output}) 2> {log}"
 
 rule picard_size_metrics:
-    priority: 500
+    priority: 1500
     input:
         marked_bam=rules.picard_mark_duplicates.output.marked_bam,
         marked_bai=rules.samtools_index_marked.output
@@ -225,7 +228,7 @@ rule picard_size_metrics:
         M=0.5 2> {log}"
 
 rule picard_alignment_summary:
-    priority: 500
+    priority: 1500
     input:
         marked_bam=rules.picard_mark_duplicates.output.marked_bam,
         marked_bai=rules.samtools_index_marked.output,
@@ -248,7 +251,7 @@ rule picard_alignment_summary:
         O={output.txt} 2> {log}"
 
 rule picard_wgs_metrics:
-    priority: 500
+    priority: 1500
     input:
         marked_bam=rules.picard_mark_duplicates.output.marked_bam,
         marked_bai=rules.samtools_index_marked.output,
@@ -271,7 +274,7 @@ rule picard_wgs_metrics:
         O={output.txt} 2> {log}"
 
 rule picard_gc_bias_metrics:
-    priority: 500
+    priority: 1500
     input:
         marked_bam=rules.picard_mark_duplicates.output.marked_bam,
         marked_bai=rules.samtools_index_marked.output,
@@ -295,7 +298,7 @@ rule picard_gc_bias_metrics:
         CHART={output.chart} 2> {log}"
 
 rule picard_validate_sam_file:
-    priority: 500
+    priority: 1500
     input:
         marked_bam=rules.picard_mark_duplicates.output.marked_bam,
         marked_bai=rules.samtools_index_marked.output,
@@ -351,7 +354,6 @@ rule gatk_recalibrate_primary:
         -O {output} 2> {log}"
 
 rule gatk_apply_BQSR:
-    priority: 800
     input:
         marked_bam=rules.picard_mark_duplicates.output.marked_bam,
         marked_bai=rules.samtools_index_marked.output,
@@ -362,6 +364,8 @@ rule gatk_apply_BQSR:
         protected("{project_samples}/{sample}/recalibration/{sample}.recalibrated.bam")
     log:
         protected("{project_samples}/{sample}/logs/{sample}.ApplyBQSR.log")
+    params:
+        tmp_dir=config["tmp_dir"]
     threads: 2
     resources:
         mem_mb=16384
@@ -371,6 +375,7 @@ rule gatk_apply_BQSR:
         -I {input.marked_bam} \
         -bqsr {input.recal} \
         -O {output} \
+        --tmp-dir {params.tmp_dir} \
         --static-quantized-quals 10 \
         --static-quantized-quals 15 \
         --static-quantized-quals 20 \
@@ -379,10 +384,10 @@ rule gatk_apply_BQSR:
         --static-quantized-quals 35 \
         --static-quantized-quals 40 \
         --static-quantized-quals 45 \
-        --static-quantized-quals 50"
+        --static-quantized-quals 50 \
+        2> {log}"
 
 rule samtools_index_recal:
-    priority: 800
     input:
         rules.gatk_apply_BQSR.output
     output:
@@ -433,6 +438,7 @@ rule gatk_recalibrate_analyze:
         -before {input.recal_before} \
         -after {input.recal_after} \
         -plots {output} 2> {log}"
+
 rule gatk_haplotype_caller:
     input:
         recal_bam=rules.gatk_apply_BQSR.output,
@@ -454,29 +460,75 @@ rule gatk_haplotype_caller:
         max_reads=config["gatk_max_reads"],
         report_num_alleles=config["gatk_report_num_alleles"],
         max_num_alleles=config["gatk_max_num_alleles"],
-        all_sites_pls=config["gatk_all_sites_pls"],
+        all_site_pls=config["gatk_all_site_pls"],
         max_assembly_size=config["gatk_max_assembly_size"],
-        assembly_padding=config["gatk_assembly_padding"]
+        assembly_padding=config["gatk_assembly_padding"],
+        tmp_dir = config["tmp_dir"]
     threads: threads_max
     resources:
-        mem_mb=196608
+        mem_mb=memory_max
     shell:
          "gatk --java-options '-Xmx{resources.mem_mb}m' HaplotypeCaller \
          -I {input.recal_bam} \
          -R {input.genome} \
          -O {output} \
          –ERC GVCF \
+         --tmp-dir {params.tmp_dir} \
          --dbsnp {input.variants} \
          --max-reads-per-alignment-start {params.max_reads} \
          --annotate-with-num-discovered-alleles {params.report_num_alleles} \
          --max-alternate-alleles {params.max_num_alleles} \
          --max-assembly-region-size {params.max_assembly_size} \
          --assembly-region-padding {params.assembly_padding} \
-         --all-sites-pls {params.all_sites_pls} \
+         --all-site-pls {params.all_site_pls} \
          {params.annotation} \
          2> {log}"
 
+rule gatk_create_gvcf_map_file:
+    input:
+         expand("{project_samples}/{sample}/variants/{sample}.g.vcf",
+                 zip, project_samples=[project_samples, ]*len(samples_names),
+                 sample=sorted(samples_names))
+    output:
+        "{project_variants}/gvcf_map.tsv"
+#    log:
+#        "{project_samples}/logs/gvcf_map.log"
+    run:
+        map_file = open("{output}", w)
+        for ele in input:
+            name = ele.split("/")[-1].split(".")[0]
+            print("{}\t{}".format(name, ele), file=map_file)
+        map_file.close()
+
+gatk_chroms = " ".join(["-L {} \\" for ele in range ]) + " -L X"
+
+rule gatk_genomic_dbi_import:
+    input:
+        "{variants_dir}/gvcf_map.tsv"
+    output:
+        touch("{variants_dir}/gvcf_db/gvcf_db.done")
+    log:
+        "{variants_dir}/GenomicDBIImport.log"
+    params:
+        db_dir="{variants_dir}/gvcf_db",
+        intervals=gatk_chroms,
+        tmp_dir=config["tmp_dir"]
+    threads: threads_max
+    resources:
+        mem_mb=memory_max
+    shell:
+       "gatk --java-options "-Xmx{params.mem_mb}m" \
+       GenomicsDBImport \
+       --genomicsdb-workspace-path {params.db_dir} \
+       --batch-size {threads} \
+       {params.intervals} \
+       --sample-name-map {input} \
+       --tmp-dir={params.tmp_dir} \
+       --reader-threads {threads}
+       2> {logs}"
+
 rule multiqc:
+    priority: 10000
     input:
         gc_bias_metrics=expand("{project_samples}/{sample}/metrics/"
                                "{sample}.GCBiasMetrics.txt",
