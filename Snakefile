@@ -423,11 +423,13 @@ rule gatk_recalibrate_analyze:
         recal_after="{project_samples}/{sample}/recalibration/{sample}.recal.2nd.table"
     output:
         protected("{project_samples}/{sample}/recalibration/{sample}.recal.pdf")
+    log:
+        "{project_samples}/{sample}/logs/{sample}.BaseRecalibrator.AnalyzeCovariates.log"
     threads: 2
     resources:
         mem_mb=16384
     shell:
-        "gatk --java-options '-Xmx{resources.mem_mb}' AnalyzeCovariates \
+        "gatk --java-options '-Xmx{resources.mem_mb}m' AnalyzeCovariates \
         -before {input.recal_before} \
         -after {input.recal_after} \
         -plots {output} 2> {log}"
