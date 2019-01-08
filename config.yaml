@@ -1,0 +1,20 @@
+# Max number of threads to run job
+threads: 20
+# Max memory to run job
+memory_max: 188416
+# tmp directory
+tmp_dir: "/tmp"
+
+project_dir: "/data"
+samples_dir: "samples"
+reads_dir: "reads"
+genome_dir: "genome"
+genome_prefix: "CanFam3.1.Ensembl.94"
+variants_dir: "variants"
+
+gatk_max_reads: 100
+gatk_report_num_alleles: "true"
+gatk_max_num_alleles: 16
+gatk_all_site_pls: "true"
+gatk_max_assembly_size: 500
+gatk_assembly_padding: 150

@@ -452,7 +452,7 @@ rule gatk_haplotype_caller:
     log:
         "{project_samples}/{sample}/logs/{sample}.HaplotypeCaller.log"
     params:
-        annotaion="--annotation-group AS_StandardAnnotation \
+        annotation="--annotation-group AS_StandardAnnotation \
          --annotation-group OrientationBiasMixtureModelAnnotation \
          --annotation-group ReducibleAnnotation \
          --annotation-group StandardAnnotation \
@@ -464,15 +464,15 @@ rule gatk_haplotype_caller:
         max_assembly_size=config["gatk_max_assembly_size"],
         assembly_padding=config["gatk_assembly_padding"],
         tmp_dir = config["tmp_dir"]
-    threads: threads_max
+    threads: 4
     resources:
-        mem_mb=memory_max
+        mem_mb=32768
     shell:
          "gatk --java-options '-Xmx{resources.mem_mb}m' HaplotypeCaller \
          -I {input.recal_bam} \
          -R {input.genome} \
          -O {output} \
-         –ERC GVCF \
+         --emit-ref-confidence GVCF \
          --tmp-dir {params.tmp_dir} \
          --dbsnp {input.variants} \
          --max-reads-per-alignment-start {params.max_reads} \
@@ -500,7 +500,7 @@ rule gatk_create_gvcf_map_file:
             print("{}\t{}".format(name, ele), file=map_file)
         map_file.close()
 
-gatk_chroms = " ".join(["-L {} \\" for ele in range ]) + " -L X"
+gatk_chroms = " ".join(["-L {} \\" for ele in range(1, 39) ]) + " -L X"
 
 rule gatk_genomic_dbi_import:
     input:
@@ -508,7 +508,7 @@ rule gatk_genomic_dbi_import:
     output:
         touch("{variants_dir}/gvcf_db/gvcf_db.done")
     log:
-        "{variants_dir}/GenomicDBIImport.log"
+        "{variants_dir}/GenomicDbiImport.log"
     params:
         db_dir="{variants_dir}/gvcf_db",
         intervals=gatk_chroms,
@@ -517,14 +517,13 @@ rule gatk_genomic_dbi_import:
     resources:
         mem_mb=memory_max
     shell:
-       "gatk --java-options "-Xmx{params.mem_mb}m" \
-       GenomicsDBImport \
+       "gatk --java-options '-Xmx{resources.mem_mb}m' GenomicsDBImport \
        --genomicsdb-workspace-path {params.db_dir} \
        --batch-size {threads} \
        {params.intervals} \
        --sample-name-map {input} \
        --tmp-dir={params.tmp_dir} \
-       --reader-threads {threads}
+       --reader-threads {threads} \
        2> {logs}"
 
 rule multiqc:
@@ -582,14 +581,16 @@ rule multiqc:
     log:
         "{project_main}/logs/multiqc_report.log"
     params:
+        input_dir=project_main,
         output_dir="{project_main}/MultiQCReport/".format(project_main=project_main)
     shell:
-        "multiqc {project_samples} -o {params.output_dir} > {log}"
+        "multiqc {params.input_dir} -o {params.output_dir} > {log}"
 
 rule all:
     input:
         multiqc="{project_main}/MultiQCReport/multiqc_report.html".format(project_main=project_main),
-        gatk_recal=expand("{project_samples}/{sample}/recalibration/{sample}.recal.bam.bai",
-                          zip,
-                          project_samples=[project_samples, ]*len(samples_names),
-                          sample=sorted(samples_names))
+        #gatk_recal=expand("{project_samples}/{sample}/recalibration/{sample}.recal.bam.bai",
+        #                  zip,
+        #                  project_samples=[project_samples, ]*len(samples_names),
+        #                  sample=sorted(samples_names))
+        gvcf_map="{variants_dir}/gvcf_map.tsv".format(variants_dir=variants_dir)

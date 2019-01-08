@@ -2,7 +2,7 @@
 
 set -eux
 
-DOCKER_IMAGE = grzadr/biosak:mapping
+DOCKER_IMAGE=grzadr/biosak:OPUS-2017-DSD_variant_calling
 
 THREADS=20
 DATA_DIR=${1}
@@ -18,4 +18,4 @@ docker run -it \
   --rm \
   --tmpfs /tmp:rw,exec,nosuid \
   ${DOCKER_IMAGE} \
-  snakemake -s /ngsnake/Snakefile --resources mem_mb=196608 --configfile /data/config.yaml -pr -j ${THREADS} ${SNAKEMAKE_ARGS}
+  snakemake -s /ngsnake/Snakefile --resources mem_mb=188416 --configfile /ngsnake/config.yaml -pr -j ${THREADS} ${SNAKEMAKE_ARGS}
