@@ -103,14 +103,14 @@ rule bwa_map_reads:
         {input.reads_1} {input.reads_2} | samtools view -Sb - > {output}) 2> {log}"
 
 rule samtools_sort_bwa_map:
-    priority: 2000
+    priority: 1950
     input:
         rules.bwa_map_reads.output
     output:
         temp("{project_samples}/{sample}/{sample}.sorted.bam")
     log:
         protected("{project_samples}/{sample}/logs/{sample}.sort_bwa_map.log")
-    threads: threads_max
+    threads: 10
     resources:
         mem_mb=4096
     shell:
@@ -121,19 +121,19 @@ rule samtools_sort_bwa_map:
         -T /tmp/{wildcards.sample} 2> {log}"
 
 rule samtools_index_sorted_bwa_map:
-    priority: 2000
+    priority: 1900
     input:
         rules.samtools_sort_bwa_map.output
     output:
         temp("{project_samples}/{sample}/{sample}.sorted.bam.bai")
     log:
         protected("{project_samples}/{sample}/logs/{sample}.index_sorted_bwa_map.log")
-    threads: threads_max
+    threads: 4
     shell:
         "samtools index -@ {threads} {input} {output}"
 
 rule picard_mark_duplicates:
-    priority: 1900
+    priority: 1850
     input:
         sorted_bam=rules.samtools_sort_bwa_map.output,
         sorted_bai=rules.samtools_index_sorted_bwa_map.output,
@@ -154,19 +154,19 @@ rule picard_mark_duplicates:
          M={output.marked_metrics} 2> {log}"
 
 rule samtools_index_marked:
-    priority: 1900
+    priority: 1800
     input:
         rules.picard_mark_duplicates.output.marked_bam
     output:
         protected("{project_samples}/{sample}/{sample}.bam.bai")
     log:
         protected("{project_samples}/{sample}/logs/{sample}.index_marked.log")
-    threads: threads_max
+    threads: 4
     shell:
         "samtools index -@ {threads} {input} {output}"
 
 rule samtools_flagstats:
-    priority: 1750
+    priority: 1500
     input:
         marked_bam=rules.picard_mark_duplicates.output.marked_bam,
         marked_bai=rules.samtools_index_marked.output
