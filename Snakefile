@@ -179,7 +179,7 @@ rule samtools_flagstats:
         "(samtools flagstat -@ {threads} {input.marked_bam} > {output}) 2> {log}"
 
 rule samtools_idxstats:
-    priority: 1250
+    priority: 1500
     input:
         marked_bam=rules.picard_mark_duplicates.output.marked_bam,
         marked_bai=rules.samtools_index_marked.output
@@ -192,7 +192,7 @@ rule samtools_idxstats:
         "(samtools idxstats {input.marked_bam} > {output}) 2> {log}"
 
 rule samtools_stats:
-    priority: 1250
+    priority: 1500
     input:
         marked_bam=rules.picard_mark_duplicates.output.marked_bam,
         marked_bai=rules.samtools_index_marked.output
@@ -216,9 +216,9 @@ rule picard_size_metrics:
         protected("{project_samples}/{sample}/logs/{sample}.InsertSizeMetrics.log")
     params:
         picard_jar = picard_jar
-    threads: 2
+    threads: 1
     resources:
-        mem_mb = 16384
+        mem_mb = 8192
     shell:
         "java -Xmx{resources.mem_mb}m -jar {params.picard_jar} \
         CollectInsertSizeMetrics \
@@ -240,9 +240,9 @@ rule picard_alignment_summary:
         protected("{project_samples}/{sample}/logs/{sample}.AlignmentSummaryMetrics.log")
     params:
         picard_jar = picard_jar
-    threads: 2
+    threads: 1
     resources:
-        mem_mb = 16384
+        mem_mb = 8192
     shell:
         "java -Xmx{resources.mem_mb}m -jar {params.picard_jar} \
         CollectAlignmentSummaryMetrics \
@@ -273,6 +273,34 @@ rule picard_wgs_metrics:
         I={input.marked_bam} \
         O={output.txt} 2> {log}"
 
+rule picard_hs_metrics:
+    priority: 1500
+    input:
+        marked_bam=rules.picard_mark_duplicates.output.marked_bam,
+        marked_bai=rules.samtools_index_marked.output,
+        genome=ancient(project_genome + ".fa"),
+        genome_dict=rules.prepare_genome_dictionary.output,
+        target_intervals=rules.prepare_target_intervals.output,
+        bait_intervals=rules.prepare_bait_intervals.output
+     output:
+        txt=protected("{project_samples}/{sample}/metrics/{sample}.HsMetrics.txt")
+    log:
+        protected("{project_samples}/{sample}/logs/{sample}.HsMetrics.log")
+    params:
+         picard_jar=picard_jar
+    threads: 1
+    resources:
+         mem_mb=8192
+    shell:
+          "java -Xmx{resources.mem_mb}m -jar {params.picard_jar} \
+          CollectHsMetrics \
+          R={input.genome} \
+          I={input.marked_bam} \
+          TARGET_INTERVALS={input.target_intervals \
+          BAIT_INTERVALS={input.bait_intervals} \
+          O={output.txt}\
+          2> {log}"
+
 rule picard_gc_bias_metrics:
     priority: 1500
     input:
@@ -288,9 +316,9 @@ rule picard_gc_bias_metrics:
         protected("{project_samples}/{sample}/logs/{sample}.GCBiasMetrics.log")
     params:
         picard_jar = picard_jar
-    threads: 2
+    threads: 1
     resources:
-        mem_mb = 16384
+        mem_mb = 8192
     shell:
         "java -Xmx{resources.mem_mb}m -jar {params.picard_jar} \
         CollectGcBiasMetrics \
@@ -310,9 +338,9 @@ rule picard_validate_sam_file:
         protected("{project_samples}/{sample}/metrics/{sample}.ValidateSamFile.log")
     params:
         picard_jar = picard_jar
-    threads: 2
+    threads: 1
     resources:
-        mem_mb = 16384
+        mem_mb = 8192
     shell:
         "java -Xmx{resources.mem_mb}m -jar {params.picard_jar} \
         ValidateSamFile \
@@ -343,9 +371,9 @@ rule gatk_recalibrate_primary:
         protected("{project_samples}/{sample}/recalibration/{sample}.BaseRecalibrator.primary.grp")
     log:
         "{project_samples}/{sample}/logs/{sample}.BaseRecalibrator.primary.log"
-    threads: 2
+    threads: 1
     resources:
-        mem_mb=16384
+        mem_mb=8192
     shell:
         "gatk --java-options '-Xmx{resources.mem_mb}m' BaseRecalibrator \
         -R {input.genome} \
@@ -366,9 +394,9 @@ rule gatk_apply_BQSR:
         protected("{project_samples}/{sample}/logs/{sample}.ApplyBQSR.log")
     params:
         tmp_dir=config["tmp_dir"]
-    threads: 2
+    threads: 1
     resources:
-        mem_mb=16384
+        mem_mb=8192
     shell:
         "gatk  --java-options '-Xmx{resources.mem_mb}m' ApplyBQSR \
         -R {input.genome} \
@@ -394,7 +422,7 @@ rule samtools_index_recal:
         protected("{project_samples}/{sample}/recalibration/{sample}.recalibrated.bam.bai")
     params:
         old_bai="{project_samples}/{sample}/recalibration/{sample}.recalibrated.bai"
-    threads: threads_max
+    threads: 4
     shell:
         #"samtools index -@ {threads} {input} {output}"
         "mv {params.old_bai} {output}"
@@ -412,9 +440,9 @@ rule gatk_recalibrate_secondary:
         protected("{project_samples}/{sample}/recalibration/{sample}.BaseRecalibrator.secondary.grp")
     log:
         "{project_samples}/{sample}/logs/{sample}.BaseRecalibrator.secondary.log"
-    threads: 2
+    threads: 1
     resources:
-        mem_mb=16384
+        mem_mb=8192
     shell:
         "gatk --java-options '-Xmx{resources.mem_mb}m' BaseRecalibrator \
         -R {input.genome} \
@@ -430,9 +458,9 @@ rule gatk_recalibrate_analyze:
         protected("{project_samples}/{sample}/recalibration/{sample}.BaseRecalibrator.pdf")
     log:
         "{project_samples}/{sample}/logs/{sample}.BaseRecalibrator.AnalyzeCovariates.log"
-    threads: 2
+    threads: 1
     resources:
-        mem_mb=16384
+        mem_mb=8192
     shell:
         "gatk --java-options '-Xmx{resources.mem_mb}m' AnalyzeCovariates \
         -before {input.recal_before} \
@@ -589,8 +617,5 @@ rule multiqc:
 rule all:
     input:
         multiqc="{project_main}/MultiQCReport/multiqc_report.html".format(project_main=project_main),
-        #gatk_recal=expand("{project_samples}/{sample}/recalibration/{sample}.recal.bam.bai",
-        #                  zip,
-        #                  project_samples=[project_samples, ]*len(samples_names),
-        #                  sample=sorted(samples_names))
         gvcf_map="{variants_dir}/gvcf_map.tsv".format(variants_dir=variants_dir)
+
