@@ -19,6 +19,8 @@ reads_pairs = ["1", "2"]
 
 variants_dir = "/".join((project_main, config["variants_dir"]))
 
+project_logs = "/".join((project_main, "logs"))
+
 (picard_version) = glob_wildcards("/opt/conda/share/picard-{version}/picard.jar")
 if not len(picard_version.version):
     raise ValueError("no Picard jar file found")
@@ -272,6 +274,46 @@ rule picard_wgs_metrics:
         R={input.genome} \
         I={input.marked_bam} \
         O={output.txt} 2> {log}"
+
+bait_bed="/".join((project_main, config["bait_intervals"], ".bed"))
+bait_intervals="/".join((project_main, config["bait_intervals"], ".intervals"))
+
+rule prepare_bait_intervals:
+    input: 
+        bed=bait_bed,
+        genome_dict=rules.prepare_genome_dictionary.output
+    output: bait_intervals
+    log: project_logs + "/Picard.BaitBedToIntervalList.log":
+    params:
+        picard_jar=picard_jar
+    threads: 1
+    resources: mem_mb=8192
+    shell:
+        "java -Xmx{resources.mem_mb}m -jar {params.picard_jar} \
+        -I {input.bed} \
+        -SD {input.genome_dict} \
+        -O {output} \
+        2> {log}"
+
+target_bed="/".join((project_gain, config["target_intervals"], ".bed"))
+target_intervals="/".join((project_main, config["target_intervals"], ".intervals"))
+
+rule prepare_target_intervals:
+    input: 
+        bed=target_bed,
+        genome_dict=rules.prepare_genome_dictionary.output
+    output: target_intervals
+    log: project_logs + "/Picard.TargetBedToIntervalList.log":
+    params:
+        picard_jar=picard_jar
+    threads: 1
+    resources: mem_mb=8192
+    shell:
+        "java -Xmx{resources.mem_mb}m -jar {params.picard_jar} \
+        -I {input.bed} \
+        -SD {input.genome_dict} \
+        -O {output} \
+        2> {log}"
 
 rule picard_hs_metrics:
     priority: 1500
