@@ -12,8 +12,8 @@ genome_dir: "genome"
 genome_prefix: "CanFam3.1.Ensembl.94"
 variants_dir: "variants"
 
-bait_intervals: "bait_intervals.bed"
-target_intervals: "target_intervals.bed"
+bait_intervals: "bait_intervals"
+target_intervals: "target_intervals"
 
 gatk_max_reads: 100
 gatk_report_num_alleles: "true"

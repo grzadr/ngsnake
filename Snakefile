@@ -151,9 +151,11 @@ rule picard_mark_duplicates:
         mem_mb = memory_max
     shell:
         "java -Xmx{resources.mem_mb}m -jar {params.picard_jar} \
-         MarkDuplicates I={input.sorted_bam} \
+         MarkDuplicates \
+         I={input.sorted_bam} \
          O={output.marked_bam} \
-         M={output.marked_metrics} 2> {log}"
+         M={output.marked_metrics} \
+         2> {log}"
 
 rule samtools_index_marked:
     priority: 1800
@@ -275,44 +277,46 @@ rule picard_wgs_metrics:
         I={input.marked_bam} \
         O={output.txt} 2> {log}"
 
-bait_bed="/".join((project_main, config["bait_intervals"], ".bed"))
-bait_intervals="/".join((project_main, config["bait_intervals"], ".intervals"))
+bait_bed="/".join((project_main, config["bait_intervals"] + ".bed"))
+bait_intervals="/".join((project_main, config["bait_intervals"] + ".intervals"))
 
 rule prepare_bait_intervals:
     input: 
         bed=bait_bed,
         genome_dict=rules.prepare_genome_dictionary.output
     output: bait_intervals
-    log: project_logs + "/Picard.BaitBedToIntervalList.log":
+    log: project_logs + "/Picard.BaitBedToIntervalList.log"
     params:
         picard_jar=picard_jar
     threads: 1
     resources: mem_mb=8192
     shell:
         "java -Xmx{resources.mem_mb}m -jar {params.picard_jar} \
-        -I {input.bed} \
-        -SD {input.genome_dict} \
-        -O {output} \
+        BedToIntervalList \
+        I={input.bed} \
+        SD={input.genome_dict} \
+        O={output} \
         2> {log}"
 
-target_bed="/".join((project_gain, config["target_intervals"], ".bed"))
-target_intervals="/".join((project_main, config["target_intervals"], ".intervals"))
+target_bed="/".join((project_main, config["target_intervals"] + ".bed"))
+target_intervals="/".join((project_main, config["target_intervals"] + ".intervals"))
 
 rule prepare_target_intervals:
     input: 
         bed=target_bed,
         genome_dict=rules.prepare_genome_dictionary.output
     output: target_intervals
-    log: project_logs + "/Picard.TargetBedToIntervalList.log":
+    log: project_logs + "/Picard.TargetBedToIntervalList.log"
     params:
         picard_jar=picard_jar
     threads: 1
     resources: mem_mb=8192
     shell:
         "java -Xmx{resources.mem_mb}m -jar {params.picard_jar} \
-        -I {input.bed} \
-        -SD {input.genome_dict} \
-        -O {output} \
+        BedToIntervalList \
+        I={input.bed} \
+        SD={input.genome_dict} \
+        O={output} \
         2> {log}"
 
 rule picard_hs_metrics:
@@ -324,21 +328,21 @@ rule picard_hs_metrics:
         genome_dict=rules.prepare_genome_dictionary.output,
         target_intervals=rules.prepare_target_intervals.output,
         bait_intervals=rules.prepare_bait_intervals.output
-     output:
+    output:
         txt=protected("{project_samples}/{sample}/metrics/{sample}.HsMetrics.txt")
     log:
         protected("{project_samples}/{sample}/logs/{sample}.HsMetrics.log")
     params:
          picard_jar=picard_jar
-    threads: 1
+    threads:2 
     resources:
-         mem_mb=8192
+         mem_mb=16384
     shell:
           "java -Xmx{resources.mem_mb}m -jar {params.picard_jar} \
           CollectHsMetrics \
           R={input.genome} \
           I={input.marked_bam} \
-          TARGET_INTERVALS={input.target_intervals \
+          TARGET_INTERVALS={input.target_intervals} \
           BAIT_INTERVALS={input.bait_intervals} \
           O={output.txt}\
           2> {log}"
@@ -466,8 +470,8 @@ rule samtools_index_recal:
         old_bai="{project_samples}/{sample}/recalibration/{sample}.recalibrated.bai"
     threads: 4
     shell:
-        #"samtools index -@ {threads} {input} {output}"
-        "mv {params.old_bai} {output}"
+        "samtools index -@ {threads} {input} {output}"
+        #"mv {params.old_bai} {output}"
 
 rule gatk_recalibrate_secondary:
     input:
@@ -595,6 +599,42 @@ rule gatk_genomic_dbi_import:
        --tmp-dir={params.tmp_dir} \
        --reader-threads {threads} \
        2> {logs}"
+
+rule multiqc_for_intervals:
+    priority: 10000
+    input:
+        hs_metrics=expand("{project_samples}/{sample}/metrics/"
+                               "{sample}.HsMetrics.txt",
+                               zip,
+                               project_samples=[project_samples, ]*len(samples_names),
+                               sample=sorted(samples_names)),
+    output:
+        "{project_main}/MultiQCReportWithIntervals/multiqc_report.html"
+    log:
+        "{project_main}/logs/multiqc_report_with_intervals.log"
+    params:
+        input_dir=project_main,
+        output_dir="{project_main}/MultiQCReportWithIntervals/".format(project_main=project_main)
+    shell:
+        "multiqc {params.input_dir} -o {params.output_dir} > {log}"
+
+rule multiqc_for_validation:
+    priority: 10000
+    input:
+        hs_metrics=expand("{project_samples}/{sample}/metrics/"
+                               "{sample}.ValidateSamFile.txt",
+                               zip,
+                               project_samples=[project_samples, ]*len(samples_names),
+                               sample=sorted(samples_names)),
+    output:
+        "{project_main}/MultiQCReportWithValidation/multiqc_report.html"
+    log:
+        "{project_main}/logs/multiqc_report_with_Validation.log"
+    params:
+        input_dir=project_main,
+        output_dir="{project_main}/MultiQCReportWithValidation/".format(project_main=project_main)
+    shell:
+        "multiqc {params.input_dir} -o {params.output_dir} > {log}"
 
 rule multiqc:
     priority: 10000
