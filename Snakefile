@@ -435,7 +435,8 @@ rule gatk_apply_BQSR:
         genome_dict=ancient("{}.dict".format(project_genome)),
         recal=rules.gatk_recalibrate_primary.output
     output:
-        protected("{project_samples}/{sample}/recalibration/{sample}.recalibrated.bam")
+        bam=protected("{project_samples}/{sample}/recalibration/{sample}.recalibrated.bam"),
+        bai=protected("{project_samples}/{sample}/recalibration/{sample}.recalibrated.bai")
     log:
         protected("{project_samples}/{sample}/logs/{sample}.ApplyBQSR.log")
     params:
@@ -448,7 +449,7 @@ rule gatk_apply_BQSR:
         -R {input.genome} \
         -I {input.marked_bam} \
         -bqsr {input.recal} \
-        -O {output} \
+        -O {output.bam} \
         --tmp-dir {params.tmp_dir} \
         --static-quantized-quals 10 \
         --static-quantized-quals 15 \
@@ -463,19 +464,19 @@ rule gatk_apply_BQSR:
 
 rule samtools_index_recal:
     input:
-        rules.gatk_apply_BQSR.output
+        rules.gatk_apply_BQSR.output.bai
     output:
         protected("{project_samples}/{sample}/recalibration/{sample}.recalibrated.bam.bai")
-    params:
-        old_bai="{project_samples}/{sample}/recalibration/{sample}.recalibrated.bai"
+#    params:
+#        old_bai="{project_samples}/{sample}/recalibration/{sample}.recalibrated.bai"
     threads: 4
     shell:
-        "samtools index -@ {threads} {input} {output}"
-        #"mv {params.old_bai} {output}"
+        #"samtools index -@ {threads} {input} {output}"
+        "mv {input} {output}"
 
 rule gatk_recalibrate_secondary:
     input:
-        recal_bam=rules.gatk_apply_BQSR.output,
+        recal_bam=rules.gatk_apply_BQSR.output.bam,
         recal_bai=rules.samtools_index_recal.output,
         genome=ancient("{}.fa".format(project_genome)),
         genome_dict=ancient("{}.dict".format(project_genome)),
@@ -515,7 +516,7 @@ rule gatk_recalibrate_analyze:
 
 rule gatk_haplotype_caller:
     input:
-        recal_bam=rules.gatk_apply_BQSR.output,
+        recal_bam=rules.gatk_apply_BQSR.output.bam,
         recal_bai=rules.samtools_index_recal.output,
         genome=ancient("{}.fa".format(project_genome)),
         genome_dict=ancient("{}.dict".format(project_genome)),
