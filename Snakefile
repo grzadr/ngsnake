@@ -406,6 +406,7 @@ rule gatk_index_variants:
         -O {output} 2> {log}"
 
 rule gatk_recalibrate_primary:
+    priority: 1000
     input:
         marked_bam=rules.picard_mark_duplicates.output.marked_bam,
         marked_bai=rules.samtools_index_marked.output,
@@ -428,6 +429,7 @@ rule gatk_recalibrate_primary:
         -O {output} 2> {log}"
 
 rule gatk_apply_BQSR:
+    priority: 1000
     input:
         marked_bam=rules.picard_mark_duplicates.output.marked_bam,
         marked_bai=rules.samtools_index_marked.output,
@@ -463,6 +465,7 @@ rule gatk_apply_BQSR:
         2> {log}"
 
 rule samtools_index_recal:
+    priority: 1000
     input:
         rules.gatk_apply_BQSR.output.bai
     output:
@@ -475,6 +478,7 @@ rule samtools_index_recal:
         "mv {input} {output}"
 
 rule gatk_recalibrate_secondary:
+    priority: 1000
     input:
         recal_bam=rules.gatk_apply_BQSR.output.bam,
         recal_bai=rules.samtools_index_recal.output,
@@ -498,6 +502,7 @@ rule gatk_recalibrate_secondary:
         -O {output} 2> {log}"
 
 rule gatk_recalibrate_analyze:
+    priority: 1000
     input:
         recal_before=rules.gatk_recalibrate_primary.output,
         recal_after=rules.gatk_recalibrate_secondary.output
@@ -515,6 +520,7 @@ rule gatk_recalibrate_analyze:
         -plots {output} 2> {log}"
 
 rule gatk_haplotype_caller:
+    priority: 900
     input:
         recal_bam=rules.gatk_apply_BQSR.output.bam,
         recal_bai=rules.samtools_index_recal.output,
@@ -697,8 +703,10 @@ rule multiqc:
     shell:
         "multiqc {params.input_dir} -o {params.output_dir} > {log}"
 
-rule all:
+#rule all:
+#    input:
+#        multiqc="{project_main}/MultiQCReport/multiqc_report.html".format(project_main=project_main)
+rule call_variants:
     input:
-        multiqc="{project_main}/MultiQCReport/multiqc_report.html".format(project_main=project_main),
         gvcf_map="{variants_dir}/gvcf_map.tsv".format(variants_dir=variants_dir)
 
