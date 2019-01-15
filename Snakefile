@@ -7,9 +7,6 @@
 # It assumes reads are located in "reads_dir" and they have the structure:
 # {sample}/{file_name}_{pair}.fq.gz, where {pair} may be "1" or "2"
 
-# Selected Picard command to implement
-# java -Xmx32g -jar /opt/conda/share/picard-2.18.16-0/picard.jar CollectHsMetrics I=CFA_615.bam O=CFA_615.hs_metrics.txt R=/data/OPUS/genome/CanFam3.1_Ensembl94.fa BAIT_INTERVALS=/data/OPUS/genome/CanFam3.1_Ensembl94.intervals TARGET_INTERVALS=/data/OPUS/genome/CanFam3.1_Ensembl94.intervals
-
 project_main = config["project_dir"]
 project_reads = "/".join((project_main, config["reads_dir"]))
 project_genome = "/".join((project_main, config["genome_dir"], config["genome_prefix"]))
@@ -694,14 +691,16 @@ rule multiqc:
                            project_samples=[project_samples, ]*len(samples_names),
                            sample=sorted(samples_names))
     output:
-        "{project_main}/MultiQCReport/multiqc_report.html"
+        "{project_main}/MultiQCReport.tar.gz"
     log:
         "{project_main}/logs/multiqc_report.log"
     params:
-        input_dir=project_main,
+        input_dir=project_samples,
         output_dir="{project_main}/MultiQCReport/".format(project_main=project_main)
     shell:
-        "multiqc {params.input_dir} -o {params.output_dir} > {log}"
+        "multiqc {params.input_dir} -o {params.output_dir} 2> {log} && \
+        tar -zcvf {output} {params.output_dir} && \
+        rm -rf {params.output_dir}"
 
 #rule all:
 #    input:
