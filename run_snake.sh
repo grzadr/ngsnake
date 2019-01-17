@@ -16,6 +16,7 @@ docker run -it \
   -w /data \
   --name ngsnake_mapping \
   --rm \
-  --tmpfs /tmp:rw,exec,nosuid \
+  -v /tmp:/tmp:rw \
   ${DOCKER_IMAGE} \
   snakemake -s /ngsnake/Snakefile --resources mem_mb=188416 --configfile /ngsnake/config.yaml -pr -j ${THREADS} ${SNAKEMAKE_ARGS}
+
