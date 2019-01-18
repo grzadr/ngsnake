@@ -14,7 +14,9 @@ project_variants = "/".join((project_main, config["variants_dir"], config["genom
 project_samples = "/".join((project_main, config["samples_dir"]))
 reads_pairs = ["1", "2"]
 
+genome_prefix=config["genome_prefix"]
 variants_dir = "/".join((project_main, config["variants_dir"]))
+snpeff_database = config["snpeff_database"]
 
 project_logs = "/".join((project_main, "logs"))
 
@@ -22,8 +24,13 @@ project_logs = "/".join((project_main, "logs"))
 if not len(picard_version.version):
     raise ValueError("no Picard jar file found")
 picard_jar = "/opt/conda/share/picard-{}/picard.jar".format(picard_version.version[0])
-
 print("Using Picard version {}".format(picard_jar))
+
+(snpeff_version) = glob_wildcards("/opt/conda/share/snpeff-{version}/snpEff.jar")
+if not len(snpeff_version.version):
+    raise ValueError("no SnpEff jar file found")
+snpeff_jar = "/opt/conda/share/picard-{}/picard.jar".format(picard_version.version[0])
+print("Using SnpEff version {}".format(snpeff_version)
 
 def reads_files_group():
     (dirs, ) = glob_wildcards(project_samples + "/{dir}")
@@ -582,13 +589,14 @@ gatk_chroms = " ".join(["-L {} \\" for ele in range(1, 39) ]) + " -L X"
 
 rule gatk_genomic_dbi_import:
     input:
-        "{variants_dir}/gvcf_map.tsv"
+#        "{variants_dir}/gvcf_map.tsv"
+        rules.gatk_create_gvcf_map_file.output
     output:
-        touch("{variants_dir}/gvcf_db/gvcf_db.done")
+        directory("{variants_dir}/gvcf_db/")
     log:
-        "{variants_dir}/GenomicDbiImport.log"
+        "{variants_dir}/GATK.GenomicDbiImport.log"
     params:
-        db_dir="{variants_dir}/gvcf_db",
+#        db_dir="{variants_dir}/gvcf_db",
         intervals=gatk_chroms,
         tmp_dir=config["tmp_dir"]
     threads: threads_max
@@ -596,13 +604,119 @@ rule gatk_genomic_dbi_import:
         mem_mb=memory_max
     shell:
        "gatk --java-options '-Xmx{resources.mem_mb}m' GenomicsDBImport \
-       --genomicsdb-workspace-path {params.db_dir} \
+       --genomicsdb-workspace-path {output} \
        --batch-size {threads} \
        {params.intervals} \
        --sample-name-map {input} \
        --tmp-dir={params.tmp_dir} \
        --reader-threads {threads} \
        2> {logs}"
+
+rule gatk_joint_calling:
+    priority: 500
+    input:
+        dbi=rules.gatk_genomic_dbi_import.output,
+        genome=ancient("{}.fa".format(project_genome)),
+        genome_dict=ancient("{}.dict".format(project_genome)),
+        variants=ancient("{}.vcf.gz".format(project_variants)),
+        variants_index=ancient("{}.vcf.gz.tbi".format(project_variants))
+    output: "{variants_dir}/var.raw.vcf"
+    log: "{variants_dir}/GATK.JointCalling.log"
+    params:
+        annotation="--annotation-group AS_StandardAnnotation \
+         --annotation-group OrientationBiasMixtureModelAnnotation \
+         --annotation-group ReducibleAnnotation \
+         --annotation-group StandardAnnotation \
+         --annotation-group StandardHCAnnotation",
+        report_num_alleles=config["gatk_report_num_alleles"],
+        max_num_alleles=config["gatk_max_num_alleles"],
+        tmp_dir = config["tmp_dir"]
+    threads: threads_max
+    resources:
+        mem_mb=memory_max
+    shell:
+         "gatk --java-options '-Xmx{resources.mem_mb}m' GenotypeGVCFs \
+         -V gendb:/{input} \
+         -R {input.genome} \
+         -O {output} \
+         --tmp-dir {params.tmp_dir} \
+         --dbsnp {input.variants} \
+         --annotate-with-num-discovered-alleles {params.report_num_alleles} \
+         --max-alternate-alleles {params.max_num_alleles} \
+         {params.annotation} \
+         2> {log}"
+
+rule picard_collect_variant_calling_metrics:
+    priority: 500
+    input:
+        vcf=rules.gatk_joint_calling.output,
+        variants=ancient("{}.vcf.gz".format(project_variants)),
+        variants_index=ancient("{}.vcf.gz.tbi".format(project_variants))
+    output:
+        "{variants_dir}/metrics/var.raw.CollectVariantCallingMetrics.txt"
+    log:
+        protected("{variants_dir}/logs/CollectVariantCallingMetrics.log")
+    params:
+        picard_jar = picard_jar
+    threads: threads_max
+    resources:
+        mem_mb=memory_max
+    shell:
+        "java -Xmx{resources.mem_mb}m -jar {params.picard_jar} \
+        CollectVariantCallingMetrics \
+        -I {input.vcf} \
+        --DBSNP {input.variants} \
+        -O {output}
+        2> {log}"
+
+rule picard_genotype_concordance:
+    priority: 500
+    input:
+        vcf=rules.gatk_joint_calling.output,
+        variants=ancient("{}.vcf.gz".format(project_variants)),
+        variants_index=ancient("{}.vcf.gz.tbi".format(project_variants))
+    output:
+        summary="{variants_dir}/metrics/var.raw.vcf.genotype_concordance_summary_metrics",
+        detail="{variants_dir}/metrics/var.raw.vcf.genotype_concordance_detail_metrics"
+    log: "{variants_dir}/logs/var.raw.Picard_GenotypeConcordance.log"
+    params:
+        picard_jar·=·picard_jar,
+        tmp_dir = config["tmp_dir"],
+        prefix="{variants_dir}/metrics/var.raw.vcf"
+    threads: threads_max
+    resources:
+        mem_mb=memory_max
+    shell:
+         "java·-Xmx{resources.mem_mb}m·-jar·{params.picard_jar} \
+         GenotypeConcordance \
+         -CV {input.vcf} \
+         -TV {input.variants \
+         -O {params.prefix} \
+         2> {log}"
+
+rule snpeff_annotate:
+    priority: 600
+    input:
+        vcf=rules.gatk_joint_calling.output,
+        snpeff_config=snpeff_database + "snpEff.config",
+        snpeff_bin=snpeff_database + "/data/" + genome_prefix + "snpEffectPredictor.bin"
+    output:
+        vcf="{variants_dir}/var.ann.vcf",
+        summary="{variants_dir}/metrics/snpeff_summary.csv"
+    log:
+        "{variants_dir}/logs/SnpEff.log"
+    params:
+        genome_prefix=genome_prefix,
+        snpeff_jar=snpeff_jar
+    threads: threads_max
+    resources:
+        mem_mb=memory_max
+    shell:
+        "$(java·-Xmx{resources.mem_mb}m·-jar·{params.snpeff_jar} \
+        -csvStats {output.summary} \
+        {params.genome_prefix} {input.vcf} \
+        > {output.vcf}) \
+        2> {log}"
 
 rule multiqc_for_intervals:
     priority: 10000
@@ -707,5 +821,17 @@ rule multiqc:
 #        multiqc="{project_main}/MultiQCReport/multiqc_report.html".format(project_main=project_main)
 rule call_variants:
     input:
-        gvcf_map="{variants_dir}/gvcf_map.tsv".format(variants_dir=variants_dir)
+        #gvcf_map="{variants_dir}/gvcf_map.tsv".format(variants_dir=variants_dir),
+        var_ann="{variants_dir}/var.ann.vcf".format(variants_dir=variants_dir),
+        picard_genotype_concordance_summary="{variants_dir}/metrics/var.raw.vcf.genotype_concordance_summary_metrics".format(variants_dir=variants_dir),
+        picard_genotype_concordance_detail="{variants_dir}/metrics/var.raw.vcf.genotype_concordance_detail_metrics".format(variants_dir=variants_dir),
+        picard_variant_calling_metrics="{variants_dir}/metrics/var.raw.CollectVariantCallingMetrics.txt".format(variants_dir=variants_dir),
+    output:
+        directory("{variants_dir}/MultiQCReport/")
+    log:
+        "{variants_dir}/logs/multiqc_report.log"
+    params:
+        input_dir=variants_dir
+    shell:
+        "multiqc {params.input_dir} -o {output} 2> {log}"
 

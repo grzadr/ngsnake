@@ -2,14 +2,17 @@
 
 set -eux
 
-DOCKER_IMAGE=grzadr/biosak:mapping
+DOCKER_IMAGE=grzadr/biosak:latest
+NGSNAKE_DIR=${PWD}
+SNPEFF_DIR=/data/SnpEff
 
-docker pull ${DOCKER_IMAGE}
+#docker pull ${DOCKER_IMAGE}
 docker run -it \
   -v /etc/localtime:/etc/localtime:ro \
   -v /tmp:/tmp:rw \
   -v ${1}:/data \
-  -v ${PWD}:/ngsnake \
+  -v ${NGSNAKE_DIR}:/ngsnake \
+  -v ${SNPEFF_DIR}:/SnpEff \
   -w /data \
   -it \
   --rm \
