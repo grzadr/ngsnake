@@ -29,20 +29,20 @@ print("Using Picard version {}".format(picard_jar))
 (snpeff_version) = glob_wildcards("/opt/conda/share/snpeff-{version}/snpEff.jar")
 if not len(snpeff_version.version):
     raise ValueError("no SnpEff jar file found")
-snpeff_jar = "/opt/conda/share/picard-{}/picard.jar".format(picard_version.version[0])
+snpeff_jar = "/opt/conda/share/snpeff-{}/snpEff.jar".format(picard_version.version[0])
 print("Using SnpEff version {}".format(snpeff_version)
 
-def reads_files_group():
+def read_samples_names():
     (dirs, ) = glob_wildcards(project_samples + "/{dir}")
     dirs = [ele for ele in dirs if "/" not in ele]
     return dirs
 
-samples_names = reads_files_group()
+samples_names = read_samples_names()
 
 print("{} samples loaded".format(len(samples_names)))
 print(*samples_names, sep=", ")
 
-threads_max = config["threads"]
+threads_max = config["threads_max"]
 memory_max = config["memory_max"]
 
 rule fastqc:
@@ -704,7 +704,7 @@ rule snpeff_annotate:
         vcf="{variants_dir}/var.ann.vcf",
         summary="{variants_dir}/metrics/snpeff_summary.csv"
     log:
-        "{variants_dir}/logs/SnpEff.log"
+        "{variants_dir}/logs/var.SnpEff.log"
     params:
         genome_prefix=genome_prefix,
         snpeff_jar=snpeff_jar
@@ -716,6 +716,132 @@ rule snpeff_annotate:
         -csvStats {output.summary} \
         {params.genome_prefix} {input.vcf} \
         > {output.vcf}) \
+        2> {log}"
+
+rule gatk_exclude_strange:
+    priority: 500
+    input:
+        vcf=rules.snpeff_annotate.output.vcf,
+        genome=ancient("{}.fa".format(project_genome)),
+        genome_dict=ancient("{}.dict".format(project_genome)),
+    output:
+        "{variants_dir}/var.ann.rest.vcf"
+    log:
+        "{variants_dir}/logs/var.GATK_SelectSNPs.log"
+    threads: 1
+    resources: 
+        mem_mb=8192
+    shell:
+        "gatk --java-options '-Xmx{resources.mem_mb}m' SelectVariants \
+        -V {input.vcf} \
+        -R {input.genome} \
+        -O {output} \
+        --exclude-non-variants true \
+        --select-type-to-exclude SNP \
+        --select-type-to-exclude MNP \
+        --select-type-to-exclude INDEL \
+        2> {log}"
+
+rule gatk_select_snps:
+    priority: 500
+    input:
+        vcf=rules.snpeff_annotate.output.vcf,
+        genome=ancient("{}.fa".format(project_genome)),
+        genome_dict=ancient("{}.dict".format(project_genome)),
+    output:
+        temp("{variants_dir}/var.ann.snp.vcf")
+    log:
+        "{variants_dir}/logs/var.GATK_SelectSNPs.log"
+    threads: 1
+    resources: 
+        mem_mb=8192
+    shell:
+        "gatk --java-options '-Xmx{resources.mem_mb}m' SelectVariants \
+        -V {input.vcf} \
+        -R {input.genome} \
+        -O {output} \
+        --exclude-non-variants true \
+        --select-type-to-include SNP \
+        --select-type-to-include MNP \
+        2> {log}"
+
+rule gatk_filter_snps:
+    priority: 500
+    input:
+        vcf=rules.gatk_select_snps,
+        genome=ancient("{}.fa".format(project_genome)),
+        genome_dict=ancient("{}.dict".format(project_genome)),
+    output:
+        protected("{variants_dir}/var.ann.snp.filtered.snp.vcf")
+    log:
+        "{variants_dir}/logs/var.GATK_FilterSNPs.log"
+    threads: 1
+    resources:
+        mem_mb=8192
+    shell:
+        "gatk --java-options '-Xmx{resources.mem_mb}m' \
+        VariantFiltration \
+        -V {input.vcf} \
+        -R {input.genome} \
+        -O {output} \
+        --filterExpression \"\
+        QD < 2.0 || \
+        FS > 60.0 || \
+        MQ < 40.0 || \
+        MQRankSum < -12.5 || \
+        ReadPosRankSum < -8.0 || \
+        SOR > 3.0\" \
+        --filterName \"GENERIC_SNP_FILTER\" \
+        2> {log}"
+
+rule gatk_select_indels:
+    priority: 500
+    input:
+        vcf=rules.snpeff_annotate.output.vcf,
+        genome=ancient("{}.fa".format(project_genome)),
+        genome_dict=ancient("{}.dict".format(project_genome)),
+    output:
+        temp("{variants_dir}/var.ann.indel.vcf")
+    log:
+        "{variants_dir}/logs/var.GATK_SelectSNPs.log"
+    threads: 1
+    resources: 
+        mem_mb=8192
+    shell:
+        "gatk --java-options '-Xmx{resources.mem_mb}m' SelectVariants \
+        -V {input.vcf} \
+        -R {input.genome} \
+        -O {output} \
+        --exclude-non-variants true \
+        --select-type-to-include INDEL \
+        2> {log}"
+
+rule gatk_filter_indel:
+    priority: 500
+    input:
+        vcf=rules.gatk_select_indels,
+        genome=ancient("{}.fa".format(project_genome)),
+        genome_dict=ancient("{}.dict".format(project_genome)),
+    output:
+        protected("{variants_dir}/var.ann.snp.filtered.snp.vcf")
+    log:
+        "{variants_dir}/logs/var.GATK_FilterInDels.log"
+    threads: 1
+    resources:
+        mem_mb=8192
+    shell:
+        "gatk --java-options '-Xmx{resources.mem_mb}m' \
+        VariantFiltration \
+        -V {input.vcf} \
+        -R {input.genome} \
+        -O {output} \
+        --filterExpression \"\
+        QD < 2.0 || \
+        FS > 200.0 || \
+        ReadPosRankSum < -20.0 || \
+        InbreedingCoeff < -0.8 || \
+        SOR > 10.0\" \
+        --filterName \"GENERIC_INDEL_FILTER\" \
         2> {log}"
 
 rule multiqc_for_intervals:
@@ -816,16 +942,19 @@ rule multiqc:
         tar -zcvf {output} {params.output_dir} && \
         rm -rf {params.output_dir}"
 
-#rule all:
-#    input:
-#        multiqc="{project_main}/MultiQCReport/multiqc_report.html".format(project_main=project_main)
 rule call_variants:
     input:
         #gvcf_map="{variants_dir}/gvcf_map.tsv".format(variants_dir=variants_dir),
-        var_ann="{variants_dir}/var.ann.vcf".format(variants_dir=variants_dir),
-        picard_genotype_concordance_summary="{variants_dir}/metrics/var.raw.vcf.genotype_concordance_summary_metrics".format(variants_dir=variants_dir),
-        picard_genotype_concordance_detail="{variants_dir}/metrics/var.raw.vcf.genotype_concordance_detail_metrics".format(variants_dir=variants_dir),
-        picard_variant_calling_metrics="{variants_dir}/metrics/var.raw.CollectVariantCallingMetrics.txt".format(variants_dir=variants_dir),
+        var_filtered_snp="{variants_dir}/var.ann.snp.filtered.vcf",
+        var_filtered_indel="{variants_dir}/var.ann.indel.filtered.vcf",
+        var_rest="{variants_dir}/var.ann.rest.vcf",
+        picard_genotype_concordance_summary="{variants_dir}/metrics/var.raw.vcf.genotype_concordance_summary_metrics",
+        picard_genotype_concordance_detail="{variants_dir}/metrics/var.raw.vcf.genotype_concordance_detail_metrics",
+        picard_variant_calling_metrics="{variants_dir}/metrics/var.raw.CollectVariantCallingMetrics.txt",
+        #var_ann="{variants_dir}/var.ann.vcf".format(variants_dir=variants_dir),
+        #picard_genotype_concordance_summary="{variants_dir}/metrics/var.raw.vcf.genotype_concordance_summary_metrics".format(variants_dir=variants_dir),
+        #picard_genotype_concordance_detail="{variants_dir}/metrics/var.raw.vcf.genotype_concordance_detail_metrics".format(variants_dir=variants_dir),
+        #picard_variant_calling_metrics="{variants_dir}/metrics/var.raw.CollectVariantCallingMetrics.txt".format(variants_dir=variants_dir),
     output:
         directory("{variants_dir}/MultiQCReport/")
     log:
@@ -834,4 +963,13 @@ rule call_variants:
         input_dir=variants_dir
     shell:
         "multiqc {params.input_dir} -o {output} 2> {log}"
+
+rule compress_multiqc_variant:
+    priority: 20000
+    input:
+        rules.call_variants.output
+    output:
+        "{variants_dir}/MultiQCReport.tar.gz".format(variants_dir=variants_dir)
+    shell:
+        "tar·-zcvf·{output}·{input}"
 

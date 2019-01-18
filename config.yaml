@@ -1,5 +1,5 @@
 # Max number of threads to run job
-threads: 20
+threads_max: 20
 # Max memory to run job
 memory_max: 188416
 # tmp directory
