@@ -29,8 +29,8 @@ print("Using Picard version {}".format(picard_jar))
 (snpeff_version) = glob_wildcards("/opt/conda/share/snpeff-{version}/snpEff.jar")
 if not len(snpeff_version.version):
     raise ValueError("no SnpEff jar file found")
-snpeff_jar = "/opt/conda/share/snpeff-{}/snpEff.jar".format(picard_version.version[0])
-print("Using SnpEff version {}".format(snpeff_version)
+snpeff_jar = "/opt/conda/share/snpeff-{}/snpEff.jar".format(snpeff_version.version[0])
+print("Using SnpEff version {}".format(snpeff_jar))
 
 def read_samples_names():
     (dirs, ) = glob_wildcards(project_samples + "/{dir}")
@@ -575,47 +575,104 @@ rule gatk_create_gvcf_map_file:
                  zip, project_samples=[project_samples, ]*len(samples_names),
                  sample=sorted(samples_names))
     output:
-        "{project_variants}/gvcf_map.tsv"
-#    log:
-#        "{project_samples}/logs/gvcf_map.log"
+        tsv="{variants_dir}/gvcf_map.tsv"
     run:
-        map_file = open("{output}", w)
+        map_file = open(output.tsv, "w")
         for ele in input:
             name = ele.split("/")[-1].split(".")[0]
             print("{}\t{}".format(name, ele), file=map_file)
         map_file.close()
+    
+def generate_intervals():
+    print(rules.prepare_genome_index.output)
+    intervals = []
 
-gatk_chroms = " ".join(["-L {} \\" for ele in range(1, 39) ]) + " -L X"
+    for line in open(rules.prepare_genome_index.output.pop()):
+        chrom, size, *rest = line.rstrip().split("\t")
+        intervals.append("{}:1-{}".format(chrom, size))
+        if chrom == "MT": break
 
-rule gatk_genomic_dbi_import:
+    return " ".join(intervals)
+
+gatk_chroms = generate_intervals()
+
+rule collect_gvcfs:
     input:
-#        "{variants_dir}/gvcf_map.tsv"
-        rules.gatk_create_gvcf_map_file.output
+        expand("{project_samples}/{sample}/variants/{sample}.g.vcf",
+                 zip, project_samples=[project_samples, ]*len(samples_names),
+                 sample=sorted(samples_names)),
     output:
-        directory("{variants_dir}/gvcf_db/")
+        expand("{project_samples}/{sample}/variants/{sample}.g.vcf",
+                 zip, project_samples=[project_samples, ]*len(samples_names),
+                 sample=sorted(samples_names)),
+
+rule gatk_combine_gvcfs:
+    priority: 500
+    input:
+#        vcfs=expand("{project_samples}/{sample}/variants/{sample}.g.vcf",
+#                 zip, project_samples=[project_samples, ]*len(samples_names),
+#                 sample=sorted(samples_names)),
+        vcfs=rules.collect_gvcfs.output,
+        genome=ancient("{}.fa".format(project_genome)),
+        genome_dict=ancient("{}.dict".format(project_genome)),
+        variants=ancient("{}.vcf.gz".format(project_variants)),
+        variants_index=ancient("{}.vcf.gz.tbi".format(project_variants)),
+    output:
+        vcf=temp("{variants_dir}/var.combined.vcf")
     log:
-        "{variants_dir}/GATK.GenomicDbiImport.log"
+        "{variants_dir}/logs/GATKCombineGVCFs.log"
     params:
-#        db_dir="{variants_dir}/gvcf_db",
-        intervals=gatk_chroms,
-        tmp_dir=config["tmp_dir"]
+        tmp_dir=config["tmp_dir"],
+        vcfs=" ".join(["-V {}".format(ele) for ele in rules.collect_gvcfs.output]),
+        annotation="--annotation-group AS_StandardAnnotation \
+         --annotation-group OrientationBiasMixtureModelAnnotation \
+         --annotation-group ReducibleAnnotation \
+         --annotation-group StandardAnnotation \
+         --annotation-group StandardHCAnnotation",
     threads: threads_max
     resources:
         mem_mb=memory_max
     shell:
-       "gatk --java-options '-Xmx{resources.mem_mb}m' GenomicsDBImport \
-       --genomicsdb-workspace-path {output} \
-       --batch-size {threads} \
-       {params.intervals} \
-       --sample-name-map {input} \
+       "gatk --java-options '-Xmx{resources.mem_mb}m' \
+       CombineGVCFs \
+       {params.vcfs} \
+       -R {input.genome} \
+       --dbsnp {input.variants} \
+       -O {output} \
        --tmp-dir={params.tmp_dir} \
-       --reader-threads {threads} \
-       2> {logs}"
+       {params.annotation} \
+       2> {log}"
 
-rule gatk_joint_calling:
+
+#rule gatk_genomic_dbi_import:
+#    input:
+#        rules.gatk_create_gvcf_map_file.output
+#    output:
+#        directory("{variants_dir}/gvcf_db")
+#    log:
+#        "{variants_dir}/logs/GATKGenomicDbiImport.log"
+#    params:
+#        intervals=gatk_chroms,
+#        tmp_dir=config["tmp_dir"]
+#    threads: threads_max
+#    resources:
+#        mem_mb=memory_max
+#    shell:
+#       "parallel gatk --java-options '-Xmx{resources.mem_mb}m' \
+#       GenomicsDBImport \
+#       --genomicsdb-workspace-path '{output}' \
+#       -L {{}} \
+#       --sample-name-map {input} \
+#       --tmp-dir={params.tmp_dir} \
+#       --reader-threads {threads} \
+#       --batch-size 50 \
+#       --genomicsdb-segment-size 100000000 \
+#       2> {log} ::: {params.intervals}"
+
+rule gatk_genotype_gvcfs:
     priority: 500
     input:
-        dbi=rules.gatk_genomic_dbi_import.output,
+        vcf=rules.gatk_combine_gvcfs.output.vcf,
         genome=ancient("{}.fa".format(project_genome)),
         genome_dict=ancient("{}.dict".format(project_genome)),
         variants=ancient("{}.vcf.gz".format(project_variants)),
@@ -635,8 +692,9 @@ rule gatk_joint_calling:
     resources:
         mem_mb=memory_max
     shell:
-         "gatk --java-options '-Xmx{resources.mem_mb}m' GenotypeGVCFs \
-         -V gendb:/{input} \
+         "gatk --spark-runner LOCAL --java-options '-Xmx{resources.mem_mb}m' \
+         GenotypeGVCFs \
+         -V {input.vcf} \
          -R {input.genome} \
          -O {output} \
          --tmp-dir {params.tmp_dir} \
@@ -649,7 +707,7 @@ rule gatk_joint_calling:
 rule picard_collect_variant_calling_metrics:
     priority: 500
     input:
-        vcf=rules.gatk_joint_calling.output,
+        vcf=rules.gatk_genotype_gvcfs.output,
         variants=ancient("{}.vcf.gz".format(project_variants)),
         variants_index=ancient("{}.vcf.gz.tbi".format(project_variants))
     output:
@@ -666,22 +724,23 @@ rule picard_collect_variant_calling_metrics:
         CollectVariantCallingMetrics \
         -I {input.vcf} \
         --DBSNP {input.variants} \
-        -O {output}
+        -O {output} \
         2> {log}"
 
 rule picard_genotype_concordance:
     priority: 500
     input:
-        vcf=rules.gatk_joint_calling.output,
+        vcf=rules.gatk_genotype_gvcfs.output,
         variants=ancient("{}.vcf.gz".format(project_variants)),
         variants_index=ancient("{}.vcf.gz.tbi".format(project_variants))
     output:
         summary="{variants_dir}/metrics/var.raw.vcf.genotype_concordance_summary_metrics",
         detail="{variants_dir}/metrics/var.raw.vcf.genotype_concordance_detail_metrics"
-    log: "{variants_dir}/logs/var.raw.Picard_GenotypeConcordance.log"
+    log:
+        "{variants_dir}/logs/var.raw.Picard_GenotypeConcordance.log"
     params:
-        picard_jar·=·picard_jar,
-        tmp_dir = config["tmp_dir"],
+        picard_jar=picard_jar,
+        tmp_dir=config["tmp_dir"],
         prefix="{variants_dir}/metrics/var.raw.vcf"
     threads: threads_max
     resources:
@@ -697,11 +756,11 @@ rule picard_genotype_concordance:
 rule snpeff_annotate:
     priority: 600
     input:
-        vcf=rules.gatk_joint_calling.output,
-        snpeff_config=snpeff_database + "snpEff.config",
-        snpeff_bin=snpeff_database + "/data/" + genome_prefix + "snpEffectPredictor.bin"
+        vcf=rules.gatk_genotype_gvcfs.output,
+        snpeff_config=snpeff_database + "/snpEff.config",
+        snpeff_bin=snpeff_database + "/data/" + genome_prefix + "/snpEffectPredictor.bin"
     output:
-        vcf="{variants_dir}/var.ann.vcf",
+        vcf=protected("{variants_dir}/var.ann.vcf"),
         summary="{variants_dir}/metrics/snpeff_summary.csv"
     log:
         "{variants_dir}/logs/var.SnpEff.log"
@@ -718,258 +777,258 @@ rule snpeff_annotate:
         > {output.vcf}) \
         2> {log}"
 
-rule gatk_exclude_strange:
-    priority: 500
-    input:
-        vcf=rules.snpeff_annotate.output.vcf,
-        genome=ancient("{}.fa".format(project_genome)),
-        genome_dict=ancient("{}.dict".format(project_genome)),
-    output:
-        "{variants_dir}/var.ann.rest.vcf"
-    log:
-        "{variants_dir}/logs/var.GATK_SelectSNPs.log"
-    threads: 1
-    resources: 
-        mem_mb=8192
-    shell:
-        "gatk --java-options '-Xmx{resources.mem_mb}m' SelectVariants \
-        -V {input.vcf} \
-        -R {input.genome} \
-        -O {output} \
-        --exclude-non-variants true \
-        --select-type-to-exclude SNP \
-        --select-type-to-exclude MNP \
-        --select-type-to-exclude INDEL \
-        2> {log}"
+#rule gatk_exclude_strange:
+#    priority: 500
+#    input:
+#        vcf=rules.snpeff_annotate.output.vcf,
+#        genome=ancient("{}.fa".format(project_genome)),
+#        genome_dict=ancient("{}.dict".format(project_genome)),
+#    output:
+#        "{variants_dir}/var.ann.rest.vcf"
+#    log:
+#        "{variants_dir}/logs/var.GATK_SelectSNPs.log"
+#    threads: 1
+#    resources: 
+#        mem_mb=8192
+#    shell:
+#        "gatk --java-options '-Xmx{resources.mem_mb}m' SelectVariants \
+#        -V {input.vcf} \
+#        -R {input.genome} \
+#        -O {output} \
+#        --exclude-non-variants true \
+#        --select-type-to-exclude SNP \
+#        --select-type-to-exclude MNP \
+#        --select-type-to-exclude INDEL \
+#        2> {log}"
 
-rule gatk_select_snps:
-    priority: 500
-    input:
-        vcf=rules.snpeff_annotate.output.vcf,
-        genome=ancient("{}.fa".format(project_genome)),
-        genome_dict=ancient("{}.dict".format(project_genome)),
-    output:
-        temp("{variants_dir}/var.ann.snp.vcf")
-    log:
-        "{variants_dir}/logs/var.GATK_SelectSNPs.log"
-    threads: 1
-    resources: 
-        mem_mb=8192
-    shell:
-        "gatk --java-options '-Xmx{resources.mem_mb}m' SelectVariants \
-        -V {input.vcf} \
-        -R {input.genome} \
-        -O {output} \
-        --exclude-non-variants true \
-        --select-type-to-include SNP \
-        --select-type-to-include MNP \
-        2> {log}"
+#rule gatk_select_snps:
+#    priority: 500
+#    input:
+#        vcf=rules.snpeff_annotate.output.vcf,
+#        genome=ancient("{}.fa".format(project_genome)),
+#        genome_dict=ancient("{}.dict".format(project_genome)),
+#    output:
+#        temp("{variants_dir}/var.ann.snp.vcf")
+#    log:
+#        "{variants_dir}/logs/var.GATK_SelectSNPs.log"
+#    threads: 1
+#    resources: 
+#        mem_mb=8192
+#    shell:
+#        "gatk --java-options '-Xmx{resources.mem_mb}m' SelectVariants \
+#        -V {input.vcf} \
+#        -R {input.genome} \
+#        -O {output} \
+#        --exclude-non-variants true \
+#        --select-type-to-include SNP \
+#        --select-type-to-include MNP \
+#        2> {log}"
 
-rule gatk_filter_snps:
-    priority: 500
-    input:
-        vcf=rules.gatk_select_snps,
-        genome=ancient("{}.fa".format(project_genome)),
-        genome_dict=ancient("{}.dict".format(project_genome)),
-    output:
-        protected("{variants_dir}/var.ann.snp.filtered.snp.vcf")
-    log:
-        "{variants_dir}/logs/var.GATK_FilterSNPs.log"
-    threads: 1
-    resources:
-        mem_mb=8192
-    shell:
-        "gatk --java-options '-Xmx{resources.mem_mb}m' \
-        VariantFiltration \
-        -V {input.vcf} \
-        -R {input.genome} \
-        -O {output} \
-        --filterExpression \"\
-        QD < 2.0 || \
-        FS > 60.0 || \
-        MQ < 40.0 || \
-        MQRankSum < -12.5 || \
-        ReadPosRankSum < -8.0 || \
-        SOR > 3.0\" \
-        --filterName \"GENERIC_SNP_FILTER\" \
-        2> {log}"
+#rule gatk_filter_snps:
+#    priority: 500
+#    input:
+#        vcf=rules.gatk_select_snps,
+#        genome=ancient("{}.fa".format(project_genome)),
+#        genome_dict=ancient("{}.dict".format(project_genome)),
+#    output:
+#        protected("{variants_dir}/var.ann.snp.filtered.snp.vcf")
+#    log:
+#        "{variants_dir}/logs/var.GATK_FilterSNPs.log"
+#    threads: 1
+#    resources:
+#        mem_mb=8192
+#    shell:
+#        "gatk --java-options '-Xmx{resources.mem_mb}m' \
+#        VariantFiltration \
+#        -V {input.vcf} \
+#        -R {input.genome} \
+#        -O {output} \
+#        --filterExpression \"\
+#        QD < 2.0 || \
+#        FS > 60.0 || \
+#        MQ < 40.0 || \
+#        MQRankSum < -12.5 || \
+#        ReadPosRankSum < -8.0 || \
+#        SOR > 3.0\" \
+#        --filterName \"GENERIC_SNP_FILTER\" \
+#        2> {log}"
 
-rule gatk_select_indels:
-    priority: 500
-    input:
-        vcf=rules.snpeff_annotate.output.vcf,
-        genome=ancient("{}.fa".format(project_genome)),
-        genome_dict=ancient("{}.dict".format(project_genome)),
-    output:
-        temp("{variants_dir}/var.ann.indel.vcf")
-    log:
-        "{variants_dir}/logs/var.GATK_SelectSNPs.log"
-    threads: 1
-    resources: 
-        mem_mb=8192
-    shell:
-        "gatk --java-options '-Xmx{resources.mem_mb}m' SelectVariants \
-        -V {input.vcf} \
-        -R {input.genome} \
-        -O {output} \
-        --exclude-non-variants true \
-        --select-type-to-include INDEL \
-        2> {log}"
+#rule gatk_select_indels:
+#    priority: 500
+#    input:
+#        vcf=rules.snpeff_annotate.output.vcf,
+#        genome=ancient("{}.fa".format(project_genome)),
+#        genome_dict=ancient("{}.dict".format(project_genome)),
+#    output:
+#        temp("{variants_dir}/var.ann.indel.vcf")
+#    log:
+#        "{variants_dir}/logs/var.GATK_SelectSNPs.log"
+#    threads: 1
+#    resources: 
+#        mem_mb=8192
+#    shell:
+#        "gatk --java-options '-Xmx{resources.mem_mb}m' SelectVariants \
+#        -V {input.vcf} \
+#        -R {input.genome} \
+#        -O {output} \
+#        --exclude-non-variants true \
+#        --select-type-to-include INDEL \
+#        2> {log}"
 
-rule gatk_filter_indel:
-    priority: 500
-    input:
-        vcf=rules.gatk_select_indels,
-        genome=ancient("{}.fa".format(project_genome)),
-        genome_dict=ancient("{}.dict".format(project_genome)),
-    output:
-        protected("{variants_dir}/var.ann.snp.filtered.snp.vcf")
-    log:
-        "{variants_dir}/logs/var.GATK_FilterInDels.log"
-    threads: 1
-    resources:
-        mem_mb=8192
-    shell:
-        "gatk --java-options '-Xmx{resources.mem_mb}m' \
-        VariantFiltration \
-        -V {input.vcf} \
-        -R {input.genome} \
-        -O {output} \
-        --filterExpression \"\
-        QD < 2.0 || \
-        FS > 200.0 || \
-        ReadPosRankSum < -20.0 || \
-        InbreedingCoeff < -0.8 || \
-        SOR > 10.0\" \
-        --filterName \"GENERIC_INDEL_FILTER\" \
-        2> {log}"
+#rule gatk_filter_indel:
+#    priority: 500
+#    input:
+#        vcf=rules.gatk_select_indels,
+#        genome=ancient("{}.fa".format(project_genome)),
+#        genome_dict=ancient("{}.dict".format(project_genome)),
+#    output:
+#        protected("{variants_dir}/var.ann.snp.filtered.snp.vcf")
+#    log:
+#        "{variants_dir}/logs/var.GATK_FilterInDels.log"
+#    threads: 1
+#    resources:
+#        mem_mb=8192
+#    shell:
+#        "gatk --java-options '-Xmx{resources.mem_mb}m' \
+#        VariantFiltration \
+#        -V {input.vcf} \
+#        -R {input.genome} \
+#        -O {output} \
+#        --filterExpression \"\
+#        QD < 2.0 || \
+#        FS > 200.0 || \
+#        ReadPosRankSum < -20.0 || \
+#        InbreedingCoeff < -0.8 || \
+#        SOR > 10.0\" \
+#        --filterName \"GENERIC_INDEL_FILTER\" \
+#        2> {log}"
 
-rule multiqc_for_intervals:
-    priority: 10000
-    input:
-        hs_metrics=expand("{project_samples}/{sample}/metrics/"
-                               "{sample}.HsMetrics.txt",
-                               zip,
-                               project_samples=[project_samples, ]*len(samples_names),
-                               sample=sorted(samples_names)),
-    output:
-        "{project_main}/MultiQCReportWithIntervals/multiqc_report.html"
-    log:
-        "{project_main}/logs/multiqc_report_with_intervals.log"
-    params:
-        input_dir=project_main,
-        output_dir="{project_main}/MultiQCReportWithIntervals/".format(project_main=project_main)
-    shell:
-        "multiqc {params.input_dir} -o {params.output_dir} > {log}"
-
-rule multiqc_for_validation:
-    priority: 10000
-    input:
-        hs_metrics=expand("{project_samples}/{sample}/metrics/"
-                               "{sample}.ValidateSamFile.txt",
-                               zip,
-                               project_samples=[project_samples, ]*len(samples_names),
-                               sample=sorted(samples_names)),
-    output:
-        "{project_main}/MultiQCReportWithValidation/multiqc_report.html"
-    log:
-        "{project_main}/logs/multiqc_report_with_Validation.log"
-    params:
-        input_dir=project_main,
-        output_dir="{project_main}/MultiQCReportWithValidation/".format(project_main=project_main)
-    shell:
-        "multiqc {params.input_dir} -o {params.output_dir} > {log}"
-
-rule multiqc:
-    priority: 10000
-    input:
-        gc_bias_metrics=expand("{project_samples}/{sample}/metrics/"
-                               "{sample}.GCBiasMetrics.txt",
-                               zip,
-                               project_samples=[project_samples, ]*len(samples_names),
-                               sample=sorted(samples_names)),
-        wgs_metrics=expand("{project_samples}/{sample}/metrics/"
-                            "{sample}.WgsMetrics.txt",
-                            zip,
-                            project_samples=[project_samples, ]*len(samples_names),
-                            sample=sorted(samples_names)),
-        alignment_metrics=expand("{project_samples}/{sample}/metrics/"
-                            "{sample}.AlignmentSummaryMetrics.txt",
-                            zip,
-                            project_samples=[project_samples, ]*len(samples_names),
-                            sample=sorted(samples_names)),
-        size_metrics=expand("{project_samples}/{sample}/metrics/"
-                            "{sample}.InsertSizeMetrics.txt",
-                            zip,
-                            project_samples=[project_samples, ]*len(samples_names),
-                            sample=sorted(samples_names)),
-        mark_duplicates=expand("{project_samples}/{sample}/metrics/"
-                               "{sample}.MarkDuplicates.txt",
-                               zip,
-                               project_samples=[project_samples, ]*len(samples_names),
-                               sample=sorted(samples_names)),
-        idxstats=expand("{project_samples}/{sample}/metrics/{sample}.idxstats",
-                        zip,
-                        project_samples=[project_samples, ]*len(samples_names),
-                        sample=sorted(samples_names)),
-        stats=expand("{project_samples}/{sample}/metrics/{sample}.stats",
-                     zip,
-                     project_samples=[project_samples, ]*len(samples_names),
-                     sample=sorted(samples_names)),
-        flagstats=expand("{project_samples}/{sample}/metrics/{sample}.flagstats",
-                         zip,
-                         project_samples=[project_samples, ]*len(samples_names),
-                         sample=sorted(samples_names)),
-        fastqc_files = expand("{project_samples}/{sample}/metrics/"
-                              "fastqc/{sample}_{pair}/{sample}_{pair}_fastqc.zip",
-                              zip,
-                              project_samples=[project_samples, ]*len(samples_names)*2,
-                              sample=sorted(samples_names*2),
-                              pair= reads_pairs * len(samples_names)),
-        gatk_recal=expand("{project_samples}/{sample}/recalibration/{sample}.BaseRecalibrator.pdf",
-                           zip,
-                           project_samples=[project_samples, ]*len(samples_names),
-                           sample=sorted(samples_names))
-    output:
-        "{project_main}/MultiQCReport.tar.gz"
-    log:
-        "{project_main}/logs/multiqc_report.log"
-    params:
-        input_dir=project_samples,
-        output_dir="{project_main}/MultiQCReport/".format(project_main=project_main)
-    shell:
-        "multiqc {params.input_dir} -o {params.output_dir} 2> {log} && \
-        tar -zcvf {output} {params.output_dir} && \
-        rm -rf {params.output_dir}"
-
-rule call_variants:
-    input:
-        #gvcf_map="{variants_dir}/gvcf_map.tsv".format(variants_dir=variants_dir),
-        var_filtered_snp="{variants_dir}/var.ann.snp.filtered.vcf",
-        var_filtered_indel="{variants_dir}/var.ann.indel.filtered.vcf",
-        var_rest="{variants_dir}/var.ann.rest.vcf",
-        picard_genotype_concordance_summary="{variants_dir}/metrics/var.raw.vcf.genotype_concordance_summary_metrics",
-        picard_genotype_concordance_detail="{variants_dir}/metrics/var.raw.vcf.genotype_concordance_detail_metrics",
-        picard_variant_calling_metrics="{variants_dir}/metrics/var.raw.CollectVariantCallingMetrics.txt",
-        #var_ann="{variants_dir}/var.ann.vcf".format(variants_dir=variants_dir),
-        #picard_genotype_concordance_summary="{variants_dir}/metrics/var.raw.vcf.genotype_concordance_summary_metrics".format(variants_dir=variants_dir),
-        #picard_genotype_concordance_detail="{variants_dir}/metrics/var.raw.vcf.genotype_concordance_detail_metrics".format(variants_dir=variants_dir),
-        #picard_variant_calling_metrics="{variants_dir}/metrics/var.raw.CollectVariantCallingMetrics.txt".format(variants_dir=variants_dir),
-    output:
-        directory("{variants_dir}/MultiQCReport/")
-    log:
-        "{variants_dir}/logs/multiqc_report.log"
-    params:
-        input_dir=variants_dir
-    shell:
-        "multiqc {params.input_dir} -o {output} 2> {log}"
-
-rule compress_multiqc_variant:
-    priority: 20000
-    input:
-        rules.call_variants.output
-    output:
-        "{variants_dir}/MultiQCReport.tar.gz".format(variants_dir=variants_dir)
-    shell:
-        "tar·-zcvf·{output}·{input}"
+#rule multiqc_for_intervals:
+#    priority: 10000
+#    input:
+#        hs_metrics=expand("{project_samples}/{sample}/metrics/"
+#                               "{sample}.HsMetrics.txt",
+#                               zip,
+#                               project_samples=[project_samples, ]*len(samples_names),
+#                               sample=sorted(samples_names)),
+#    output:
+#        "{project_main}/MultiQCReportWithIntervals/multiqc_report.html"
+#    log:
+#        "{project_main}/logs/multiqc_report_with_intervals.log"
+#    params:
+#        input_dir=project_main,
+#        output_dir="{project_main}/MultiQCReportWithIntervals/".format(project_main=project_main)
+#    shell:
+#        "multiqc {params.input_dir} -o {params.output_dir} > {log}"
+#
+#rule multiqc_for_validation:
+#    priority: 10000
+#    input:
+#        hs_metrics=expand("{project_samples}/{sample}/metrics/"
+#                               "{sample}.ValidateSamFile.txt",
+#                               zip,
+#                               project_samples=[project_samples, ]*len(samples_names),
+#                               sample=sorted(samples_names)),
+#    output:
+#        "{project_main}/MultiQCReportWithValidation/multiqc_report.html"
+#    log:
+#        "{project_main}/logs/multiqc_report_with_Validation.log"
+#    params:
+#        input_dir=project_main,
+#        output_dir="{project_main}/MultiQCReportWithValidation/".format(project_main=project_main)
+#    shell:
+#        "multiqc {params.input_dir} -o {params.output_dir} > {log}"
+#
+#rule multiqc:
+#    priority: 10000
+#    input:
+#        gc_bias_metrics=expand("{project_samples}/{sample}/metrics/"
+#                               "{sample}.GCBiasMetrics.txt",
+#                               zip,
+#                               project_samples=[project_samples, ]*len(samples_names),
+#                               sample=sorted(samples_names)),
+#        wgs_metrics=expand("{project_samples}/{sample}/metrics/"
+#                            "{sample}.WgsMetrics.txt",
+#                            zip,
+#                            project_samples=[project_samples, ]*len(samples_names),
+#                            sample=sorted(samples_names)),
+#        alignment_metrics=expand("{project_samples}/{sample}/metrics/"
+#                            "{sample}.AlignmentSummaryMetrics.txt",
+#                            zip,
+#                            project_samples=[project_samples, ]*len(samples_names),
+#                            sample=sorted(samples_names)),
+#        size_metrics=expand("{project_samples}/{sample}/metrics/"
+#                            "{sample}.InsertSizeMetrics.txt",
+#                            zip,
+#                            project_samples=[project_samples, ]*len(samples_names),
+#                            sample=sorted(samples_names)),
+#        mark_duplicates=expand("{project_samples}/{sample}/metrics/"
+#                               "{sample}.MarkDuplicates.txt",
+#                               zip,
+#                               project_samples=[project_samples, ]*len(samples_names),
+#                               sample=sorted(samples_names)),
+#        idxstats=expand("{project_samples}/{sample}/metrics/{sample}.idxstats",
+#                        zip,
+#                        project_samples=[project_samples, ]*len(samples_names),
+#                        sample=sorted(samples_names)),
+#        stats=expand("{project_samples}/{sample}/metrics/{sample}.stats",
+#                     zip,
+#                     project_samples=[project_samples, ]*len(samples_names),
+#                     sample=sorted(samples_names)),
+#        flagstats=expand("{project_samples}/{sample}/metrics/{sample}.flagstats",
+#                         zip,
+#                         project_samples=[project_samples, ]*len(samples_names),
+#                         sample=sorted(samples_names)),
+#        fastqc_files = expand("{project_samples}/{sample}/metrics/"
+#                              "fastqc/{sample}_{pair}/{sample}_{pair}_fastqc.zip",
+#                              zip,
+#                              project_samples=[project_samples, ]*len(samples_names)*2,
+#                              sample=sorted(samples_names*2),
+#                              pair= reads_pairs * len(samples_names)),
+#        gatk_recal=expand("{project_samples}/{sample}/recalibration/{sample}.BaseRecalibrator.pdf",
+#                           zip,
+#                           project_samples=[project_samples, ]*len(samples_names),
+#                           sample=sorted(samples_names))
+#    output:
+#        "{project_main}/MultiQCReport.tar.gz"
+#    log:
+#        "{project_main}/logs/multiqc_report.log"
+#    params:
+#        input_dir=project_samples,
+#        output_dir="{project_main}/MultiQCReport/".format(project_main=project_main)
+#    shell:
+#        "multiqc {params.input_dir} -o {params.output_dir} 2> {log} && \
+#        tar -zcvf {output} {params.output_dir} && \
+#        rm -rf {params.output_dir}"
+#
+#rule call_variants:
+#    input:
+#        #gvcf_map="{variants_dir}/gvcf_map.tsv".format(variants_dir=variants_dir),
+#        var_filtered_snp="{variants_dir}/var.ann.snp.filtered.vcf",
+#        var_filtered_indel="{variants_dir}/var.ann.indel.filtered.vcf",
+#        var_rest="{variants_dir}/var.ann.rest.vcf",
+#        picard_genotype_concordance_summary="{variants_dir}/metrics/var.raw.vcf.genotype_concordance_summary_metrics",
+#        picard_genotype_concordance_detail="{variants_dir}/metrics/var.raw.vcf.genotype_concordance_detail_metrics",
+#        picard_variant_calling_metrics="{variants_dir}/metrics/var.raw.CollectVariantCallingMetrics.txt",
+#        #var_ann="{variants_dir}/var.ann.vcf".format(variants_dir=variants_dir),
+#        #picard_genotype_concordance_summary="{variants_dir}/metrics/var.raw.vcf.genotype_concordance_summary_metrics".format(variants_dir=variants_dir),
+#        #picard_genotype_concordance_detail="{variants_dir}/metrics/var.raw.vcf.genotype_concordance_detail_metrics".format(variants_dir=variants_dir),
+#        #picard_variant_calling_metrics="{variants_dir}/metrics/var.raw.CollectVariantCallingMetrics.txt".format(variants_dir=variants_dir),
+#    output:
+#        directory("{variants_dir}/MultiQCReport/")
+#    log:
+#        "{variants_dir}/logs/multiqc_report.log"
+#    params:
+#        input_dir=variants_dir
+#    shell:
+#        "multiqc {params.input_dir} -o {output} 2> {log}"
+#
+#rule compress_multiqc_variant:
+#    priority: 20000
+#    input:
+#        rules.call_variants.output
+#    output:
+#        "{variants_dir}/MultiQCReport.tar.gz".format(variants_dir=variants_dir)
+#    shell:
+#        "tar·-zcvf·{output}·{input}"
 
