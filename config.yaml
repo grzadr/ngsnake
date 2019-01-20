@@ -21,5 +21,6 @@ gatk_max_num_alleles: 16
 gatk_all_site_pls: "true"
 gatk_max_assembly_size: 500
 gatk_assembly_padding: 150
+gatk_annotations: ["AS_StandardAnnotation", "ReducibleAnnotation"]
 
 snpeff_database: "/SnpEff"

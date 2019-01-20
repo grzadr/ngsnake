@@ -618,7 +618,8 @@ rule gatk_combine_gvcfs:
         variants=ancient("{}.vcf.gz".format(project_variants)),
         variants_index=ancient("{}.vcf.gz.tbi".format(project_variants)),
     output:
-        vcf=temp("{variants_dir}/var.combined.vcf")
+        vcf=protected("{variants_dir}/var.combined.vcf"),
+        vcf_idx=protected("{variants_dir}/var.combined.vcf.idx")
     log:
         "{variants_dir}/logs/GATKCombineGVCFs.log"
     params:
@@ -638,7 +639,7 @@ rule gatk_combine_gvcfs:
        {params.vcfs} \
        -R {input.genome} \
        --dbsnp {input.variants} \
-       -O {output} \
+       -O {output.vcf} \
        --tmp-dir={params.tmp_dir} \
        {params.annotation} \
        2> {log}"
@@ -673,18 +674,20 @@ rule gatk_genotype_gvcfs:
     priority: 500
     input:
         vcf=rules.gatk_combine_gvcfs.output.vcf,
+        vcf_idx=rules.gatk_combine_gvcfs.output.vcf_idx,
         genome=ancient("{}.fa".format(project_genome)),
         genome_dict=ancient("{}.dict".format(project_genome)),
         variants=ancient("{}.vcf.gz".format(project_variants)),
         variants_index=ancient("{}.vcf.gz.tbi".format(project_variants))
-    output: "{variants_dir}/var.raw.vcf"
-    log: "{variants_dir}/GATK.JointCalling.log"
+    output:
+        vcf="{variants_dir}/var.raw.vcf",
+        vcf_idx="{variants_dir}/var.raw.vcf.idx"
+    log: "{variants_dir}/logs/GATKGenotypeGVCFs.log"
     params:
-        annotation="--annotation-group AS_StandardAnnotation \
-         --annotation-group OrientationBiasMixtureModelAnnotation \
+        annotation="\
+         --annotation-group AS_StandardAnnotation \
          --annotation-group ReducibleAnnotation \
-         --annotation-group StandardAnnotation \
-         --annotation-group StandardHCAnnotation",
+         ",
         report_num_alleles=config["gatk_report_num_alleles"],
         max_num_alleles=config["gatk_max_num_alleles"],
         tmp_dir = config["tmp_dir"]
@@ -692,11 +695,11 @@ rule gatk_genotype_gvcfs:
     resources:
         mem_mb=memory_max
     shell:
-         "gatk --spark-runner LOCAL --java-options '-Xmx{resources.mem_mb}m' \
+         "gatk --java-options '-Xmx{resources.mem_mb}m' \
          GenotypeGVCFs \
          -V {input.vcf} \
          -R {input.genome} \
-         -O {output} \
+         -O {output.vcf} \
          --tmp-dir {params.tmp_dir} \
          --dbsnp {input.variants} \
          --annotate-with-num-discovered-alleles {params.report_num_alleles} \
@@ -707,7 +710,8 @@ rule gatk_genotype_gvcfs:
 rule picard_collect_variant_calling_metrics:
     priority: 500
     input:
-        vcf=rules.gatk_genotype_gvcfs.output,
+        vcf=rules.gatk_genotype_gvcfs.output.vcf,
+        vcf_idx=rules.gatk_genotype_gvcfs.output.vcf_idx,
         variants=ancient("{}.vcf.gz".format(project_variants)),
         variants_index=ancient("{}.vcf.gz.tbi".format(project_variants))
     output:
@@ -730,7 +734,8 @@ rule picard_collect_variant_calling_metrics:
 rule picard_genotype_concordance:
     priority: 500
     input:
-        vcf=rules.gatk_genotype_gvcfs.output,
+        vcf=rules.gatk_genotype_gvcfs.output.vcf,
+        vcf_idx=rules.gatk_genotype_gvcfs.output.vcf_idx,
         variants=ancient("{}.vcf.gz".format(project_variants)),
         variants_index=ancient("{}.vcf.gz.tbi".format(project_variants))
     output:
@@ -756,7 +761,8 @@ rule picard_genotype_concordance:
 rule snpeff_annotate:
     priority: 600
     input:
-        vcf=rules.gatk_genotype_gvcfs.output,
+        vcf=rules.gatk_genotype_gvcfs.output.vcf,
+        vcf_idx=rules.gatk_genotype_gvcfs.output.vcf_idx,
         snpeff_config=snpeff_database + "/snpEff.config",
         snpeff_bin=snpeff_database + "/data/" + genome_prefix + "/snpEffectPredictor.bin"
     output:
