@@ -699,7 +699,7 @@ rule picard_collect_variant_calling_metrics:
         variants=ancient("{}.vcf.gz".format(project_variants)),
         variants_index=ancient("{}.vcf.gz.tbi".format(project_variants))
     output:
-        summary="{variants_dir}/metrics/var.raw.vcf.variant_calling_summary_metrics"
+        summary="{variants_dir}/metrics/var.raw.vcf.variant_calling_summary_metrics",
         detail="{variants_dir}/metrics/var.raw.vcf.variant_calling_detail_metrics"
     log:
         protected("{variants_dir}/logs/CollectVariantCallingMetrics.log")
@@ -716,33 +716,6 @@ rule picard_collect_variant_calling_metrics:
         DBSNP={input.variants} \
         O={params.prefix} \
         2> {log}"
-
-rule picard_genotype_concordance:
-    priority: 500
-    input:
-        vcf=rules.gatk_genotype_gvcfs.output.vcf,
-        vcf_idx=rules.gatk_genotype_gvcfs.output.vcf_idx,
-        variants=ancient("{}.vcf.gz".format(project_variants)),
-        variants_index=ancient("{}.vcf.gz.tbi".format(project_variants))
-    output:
-        summary="{variants_dir}/metrics/var.raw.vcf.genotype_concordance_summary_metrics",
-        detail="{variants_dir}/metrics/var.raw.vcf.genotype_concordance_detail_metrics"
-    log:
-        "{variants_dir}/logs/PicardGenotypeConcordance.log"
-    params:
-        picard_jar=picard_jar,
-        tmp_dir=config["tmp_dir"],
-        prefix="{variants_dir}/metrics/var.raw.vcf"
-    threads: threads_max
-    resources:
-        mem_mb=memory_max
-    shell:
-         "java -Xmx{resources.mem_mb}m -jar {params.picard_jar} \
-         GenotypeConcordance \
-         CALL_VCF={input.vcf} \
-         TRUTH_VCF={input.variants} \
-         O={params.prefix} \
-         2> {log}"
 
 rule snpeff_annotate_variants:
     priority: 600
@@ -798,7 +771,6 @@ def generate_intervals():
     return intervals
 
 gatk_intervals=generate_intervals()
-
 
 rule gatk_exclude_strange:
     priority: 500
@@ -1039,11 +1011,28 @@ rule multiqc:
         tar -zcvf {output} {params.output_dir} && \
         rm -rf {params.output_dir}"
 
-#rule call_variants:
-#    input:
-#        var_filtered_snp="{variants_dir}/var.ann.snp.filtered.vcf".format(variants_dir=variants_dir),
-#        var_filtered_indel="{variants_dir}/var.ann.indel.filtered.vcf".format(variants_dir=variants_dir),
-#        var_rest="{variants_dir}/var.ann.rest.vcf".format(variants_dir=variants_dir),
+rule call_variants:
+    input:
+        var_filtered_snp="{variants_dir}/var.ann.snp.filtered.vcf".format(variants_dir=variants_dir),
+        var_filtered_indel="{variants_dir}/var.ann.indel.filtered.vcf".format(variants_dir=variants_dir),
+        var_rest="{variants_dir}/var.ann.rest.vcf".format(variants_dir=variants_dir)
+
+rule multiqc_for_variants:
+    input:
+        rules.snpeff_annotate_variants.output.summary,
+        rules.picard_collect_variant_calling_metrics.output.summary
+    output:
+        "{variants_dir}/MultiQCReportVariants.tar.gz".format(variants_dir=variants_dir)
+    log:
+        "{variants_dir}/logs/multiqc_variants_report.log"
+    params:
+        input_dir=variants_dir,
+        output_dir="{variants_dir}/MultiQCReportVariants/".format(variants_dir=variants_dir)
+    shell:
+        "multiqc {params.input_dir} -o {params.output_dir} 2> {log} && \
+        tar -zcvf {output} {params.output_dir} && \
+        rm -rf {params.output_dir}"
+
 #        picard_genotype_concordance_summary="{variants_dir}/metrics/var.raw.vcf.genotype_concordance_summary_metrics".format(variants_dir=variants_dir),
 #        picard_genotype_concordance_detail="{variants_dir}/metrics/var.raw.vcf.genotype_concordance_detail_metrics".format(variants_dir=variants_dir),
 #        picard_variant_calling_metrics="{variants_dir}/metrics/var.raw.CollectVariantCallingMetrics.txt".format(variants_dir=variants_dir),
