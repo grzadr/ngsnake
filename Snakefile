@@ -523,6 +523,104 @@ rule gatk_recalibrate_analyze:
         -after {input.recal_after} \
         -plots {output} 2> {log}"
 
+rule multiqc_for_intervals:
+    priority: 10000
+    input:
+        hs_metrics=expand("{project_samples}/{sample}/metrics/"
+                               "{sample}.HsMetrics.txt",
+                               zip,
+                               project_samples=[project_samples, ]*len(samples_names),
+                               sample=sorted(samples_names)),
+    output:
+        "{project_main}/MultiQCReportWithIntervals/multiqc_report.html"
+    log:
+        "{project_main}/logs/multiqc_report_with_intervals.log"
+    params:
+        input_dir=project_main,
+        output_dir="{project_main}/MultiQCReportWithIntervals/".format(project_main=project_main)
+    shell:
+        "multiqc {params.input_dir} -o {params.output_dir} > {log}"
+
+rule multiqc_for_validation:
+    priority: 10000
+    input:
+        hs_metrics=expand("{project_samples}/{sample}/metrics/"
+                               "{sample}.ValidateSamFile.txt",
+                               zip,
+                               project_samples=[project_samples, ]*len(samples_names),
+                               sample=sorted(samples_names)),
+    output:
+        "{project_main}/MultiQCReportWithValidation/multiqc_report.html"
+    log:
+        "{project_main}/logs/multiqc_report_with_Validation.log"
+    params:
+        input_dir=project_main,
+        output_dir="{project_main}/MultiQCReportWithValidation/".format(project_main=project_main)
+    shell:
+        "multiqc {params.input_dir} -o {params.output_dir} > {log}"
+
+rule multiqc:
+    priority: 10000
+    input:
+        gc_bias_metrics=expand("{project_samples}/{sample}/metrics/"
+                               "{sample}.GCBiasMetrics.txt",
+                               zip,
+                               project_samples=[project_samples, ]*len(samples_names),
+                               sample=sorted(samples_names)),
+        wgs_metrics=expand("{project_samples}/{sample}/metrics/"
+                            "{sample}.WgsMetrics.txt",
+                            zip,
+                            project_samples=[project_samples, ]*len(samples_names),
+                            sample=sorted(samples_names)),
+        alignment_metrics=expand("{project_samples}/{sample}/metrics/"
+                            "{sample}.AlignmentSummaryMetrics.txt",
+                            zip,
+                            project_samples=[project_samples, ]*len(samples_names),
+                            sample=sorted(samples_names)),
+        size_metrics=expand("{project_samples}/{sample}/metrics/"
+                            "{sample}.InsertSizeMetrics.txt",
+                            zip,
+                            project_samples=[project_samples, ]*len(samples_names),
+                            sample=sorted(samples_names)),
+        mark_duplicates=expand("{project_samples}/{sample}/metrics/"
+                               "{sample}.MarkDuplicates.txt",
+                               zip,
+                               project_samples=[project_samples, ]*len(samples_names),
+                               sample=sorted(samples_names)),
+        idxstats=expand("{project_samples}/{sample}/metrics/{sample}.idxstats",
+                        zip,
+                        project_samples=[project_samples, ]*len(samples_names),
+                        sample=sorted(samples_names)),
+        stats=expand("{project_samples}/{sample}/metrics/{sample}.stats",
+                     zip,
+                     project_samples=[project_samples, ]*len(samples_names),
+                     sample=sorted(samples_names)),
+        flagstats=expand("{project_samples}/{sample}/metrics/{sample}.flagstats",
+                         zip,
+                         project_samples=[project_samples, ]*len(samples_names),
+                         sample=sorted(samples_names)),
+        fastqc_files = expand("{project_samples}/{sample}/metrics/"
+                              "fastqc/{sample}_{pair}/{sample}_{pair}_fastqc.zip",
+                              zip,
+                              project_samples=[project_samples, ]*len(samples_names)*2,
+                              sample=sorted(samples_names*2),
+                              pair= reads_pairs * len(samples_names)),
+        gatk_recal=expand("{project_samples}/{sample}/recalibration/{sample}.BaseRecalibrator.pdf",
+                           zip,
+                           project_samples=[project_samples, ]*len(samples_names),
+                           sample=sorted(samples_names))
+    output:
+        "{project_main}/MultiQCReport.tar.gz"
+    log:
+        "{project_main}/logs/multiqc_report.log"
+    params:
+        input_dir=project_samples,
+        output_dir="{project_main}/MultiQCReport/".format(project_main=project_main)
+    shell:
+        "multiqc {params.input_dir} -o {params.output_dir} 2> {log} && \
+        tar -zcvf {output} {params.output_dir} && \
+        rm -rf {params.output_dir}"
+
 rule gatk_haplotype_caller:
     priority: 900
     input:
@@ -537,11 +635,7 @@ rule gatk_haplotype_caller:
     log:
         "{project_samples}/{sample}/logs/{sample}.HaplotypeCaller.log"
     params:
-        annotation="--annotation-group AS_StandardAnnotation \
-         --annotation-group OrientationBiasMixtureModelAnnotation \
-         --annotation-group ReducibleAnnotation \
-         --annotation-group StandardAnnotation \
-         --annotation-group StandardHCAnnotation",
+        annotate=" ".join["--annotation-group " + ele for ele in config["gatk_annotations"]]
         max_reads=config["gatk_max_reads"],
         report_num_alleles=config["gatk_report_num_alleles"],
         max_num_alleles=config["gatk_max_num_alleles"],
@@ -602,18 +696,14 @@ rule gatk_combine_gvcfs:
         variants=ancient("{}.vcf.gz".format(project_variants)),
         variants_index=ancient("{}.vcf.gz.tbi".format(project_variants)),
     output:
-        vcf=protected("{variants_dir}/var.combined.vcf"),
-        vcf_idx=protected("{variants_dir}/var.combined.vcf.idx")
+        vcf=temp("{variants_dir}/var.combined.vcf"),
+        vcf_idx=temp("{variants_dir}/var.combined.vcf.idx")
     log:
         "{variants_dir}/logs/GATKCombineGVCFs.log"
     params:
         tmp_dir=config["tmp_dir"],
         vcfs=" ".join(["-V {}".format(ele) for ele in rules.collect_gvcfs.output]),
-        annotation="--annotation-group AS_StandardAnnotation \
-         --annotation-group OrientationBiasMixtureModelAnnotation \
-         --annotation-group ReducibleAnnotation \
-         --annotation-group StandardAnnotation \
-         --annotation-group StandardHCAnnotation",
+        annotate=" ".join["--annotation-group " + ele for ele in config["gatk_annotations"]]
     threads: threads_max
     resources:
         mem_mb=memory_max
@@ -628,32 +718,6 @@ rule gatk_combine_gvcfs:
        {params.annotation} \
        2> {log}"
 
-
-#rule gatk_genomic_dbi_import:
-#    input:
-#        rules.gatk_create_gvcf_map_file.output
-#    output:
-#        directory("{variants_dir}/gvcf_db")
-#    log:
-#        "{variants_dir}/logs/GATKGenomicDbiImport.log"
-#    params:
-#        intervals=gatk_chroms,
-#        tmp_dir=config["tmp_dir"]
-#    threads: threads_max
-#    resources:
-#        mem_mb=memory_max
-#    shell:
-#       "parallel gatk --java-options '-Xmx{resources.mem_mb}m' \
-#       GenomicsDBImport \
-#       --genomicsdb-workspace-path '{output}' \
-#       -L {{}} \
-#       --sample-name-map {input} \
-#       --tmp-dir={params.tmp_dir} \
-#       --reader-threads {threads} \
-#       --batch-size 50 \
-#       --genomicsdb-segment-size 100000000 \
-#       2> {log} ::: {params.intervals}"
-
 rule gatk_genotype_gvcfs:
     priority: 500
     input:
@@ -664,14 +728,11 @@ rule gatk_genotype_gvcfs:
         variants=ancient("{}.vcf.gz".format(project_variants)),
         variants_index=ancient("{}.vcf.gz.tbi".format(project_variants))
     output:
-        vcf="{variants_dir}/var.raw.vcf",
-        vcf_idx="{variants_dir}/var.raw.vcf.idx"
+        vcf=temp("{variants_dir}/var.raw.vcf"),
+        vcf_idx=temp("{variants_dir}/var.raw.vcf.idx")
     log: "{variants_dir}/logs/GATKGenotypeGVCFs.log"
     params:
-        annotation="\
-         --annotation-group AS_StandardAnnotation \
-         --annotation-group ReducibleAnnotation \
-         ",
+        annotate=" ".join["--annotation-group " + ele for ele in config["gatk_annotations"]],
         report_num_alleles=config["gatk_report_num_alleles"],
         max_num_alleles=config["gatk_max_num_alleles"],
         tmp_dir = config["tmp_dir"]
@@ -780,7 +841,7 @@ rule gatk_exclude_strange:
         genome=ancient("{}.fa".format(project_genome)),
         genome_dict=ancient("{}.dict".format(project_genome)),
     output:
-        "{variants_dir}/var.ann.rest.vcf"
+        protected("{variants_dir}/var.ann.rest.vcf")
     log:
         "{variants_dir}/logs/GATKExcludeStrange.log"
     params:
@@ -809,7 +870,7 @@ rule gatk_select_snps:
         genome=ancient("{}.fa".format(project_genome)),
         genome_dict=ancient("{}.dict".format(project_genome)),
     output:
-        "{variants_dir}/var.ann.snps.vcf"
+        temp("{variants_dir}/var.ann.snp.vcf")
     log:
         "{variants_dir}/logs/GATKSelectSNPs.log"
     params:
@@ -866,7 +927,7 @@ rule gatk_select_indels:
         genome=ancient("{}.fa".format(project_genome)),
         genome_dict=ancient("{}.dict".format(project_genome)),
     output:
-        "{variants_dir}/var.ann.indel.vcf"
+        temp("{variants_dir}/var.ann.indel.vcf")
     log:
         "{variants_dir}/logs/GATKSelectInDels.log"
     params:
@@ -912,104 +973,6 @@ rule gatk_filter_indel:
         SOR > 10.0\" \
         --filter-name \"GENERIC_INDEL_FILTER\" \
         2> {log}"
-
-rule multiqc_for_intervals:
-    priority: 10000
-    input:
-        hs_metrics=expand("{project_samples}/{sample}/metrics/"
-                               "{sample}.HsMetrics.txt",
-                               zip,
-                               project_samples=[project_samples, ]*len(samples_names),
-                               sample=sorted(samples_names)),
-    output:
-        "{project_main}/MultiQCReportWithIntervals/multiqc_report.html"
-    log:
-        "{project_main}/logs/multiqc_report_with_intervals.log"
-    params:
-        input_dir=project_main,
-        output_dir="{project_main}/MultiQCReportWithIntervals/".format(project_main=project_main)
-    shell:
-        "multiqc {params.input_dir} -o {params.output_dir} > {log}"
-
-rule multiqc_for_validation:
-    priority: 10000
-    input:
-        hs_metrics=expand("{project_samples}/{sample}/metrics/"
-                               "{sample}.ValidateSamFile.txt",
-                               zip,
-                               project_samples=[project_samples, ]*len(samples_names),
-                               sample=sorted(samples_names)),
-    output:
-        "{project_main}/MultiQCReportWithValidation/multiqc_report.html"
-    log:
-        "{project_main}/logs/multiqc_report_with_Validation.log"
-    params:
-        input_dir=project_main,
-        output_dir="{project_main}/MultiQCReportWithValidation/".format(project_main=project_main)
-    shell:
-        "multiqc {params.input_dir} -o {params.output_dir} > {log}"
-
-rule multiqc:
-    priority: 10000
-    input:
-        gc_bias_metrics=expand("{project_samples}/{sample}/metrics/"
-                               "{sample}.GCBiasMetrics.txt",
-                               zip,
-                               project_samples=[project_samples, ]*len(samples_names),
-                               sample=sorted(samples_names)),
-        wgs_metrics=expand("{project_samples}/{sample}/metrics/"
-                            "{sample}.WgsMetrics.txt",
-                            zip,
-                            project_samples=[project_samples, ]*len(samples_names),
-                            sample=sorted(samples_names)),
-        alignment_metrics=expand("{project_samples}/{sample}/metrics/"
-                            "{sample}.AlignmentSummaryMetrics.txt",
-                            zip,
-                            project_samples=[project_samples, ]*len(samples_names),
-                            sample=sorted(samples_names)),
-        size_metrics=expand("{project_samples}/{sample}/metrics/"
-                            "{sample}.InsertSizeMetrics.txt",
-                            zip,
-                            project_samples=[project_samples, ]*len(samples_names),
-                            sample=sorted(samples_names)),
-        mark_duplicates=expand("{project_samples}/{sample}/metrics/"
-                               "{sample}.MarkDuplicates.txt",
-                               zip,
-                               project_samples=[project_samples, ]*len(samples_names),
-                               sample=sorted(samples_names)),
-        idxstats=expand("{project_samples}/{sample}/metrics/{sample}.idxstats",
-                        zip,
-                        project_samples=[project_samples, ]*len(samples_names),
-                        sample=sorted(samples_names)),
-        stats=expand("{project_samples}/{sample}/metrics/{sample}.stats",
-                     zip,
-                     project_samples=[project_samples, ]*len(samples_names),
-                     sample=sorted(samples_names)),
-        flagstats=expand("{project_samples}/{sample}/metrics/{sample}.flagstats",
-                         zip,
-                         project_samples=[project_samples, ]*len(samples_names),
-                         sample=sorted(samples_names)),
-        fastqc_files = expand("{project_samples}/{sample}/metrics/"
-                              "fastqc/{sample}_{pair}/{sample}_{pair}_fastqc.zip",
-                              zip,
-                              project_samples=[project_samples, ]*len(samples_names)*2,
-                              sample=sorted(samples_names*2),
-                              pair= reads_pairs * len(samples_names)),
-        gatk_recal=expand("{project_samples}/{sample}/recalibration/{sample}.BaseRecalibrator.pdf",
-                           zip,
-                           project_samples=[project_samples, ]*len(samples_names),
-                           sample=sorted(samples_names))
-    output:
-        "{project_main}/MultiQCReport.tar.gz"
-    log:
-        "{project_main}/logs/multiqc_report.log"
-    params:
-        input_dir=project_samples,
-        output_dir="{project_main}/MultiQCReport/".format(project_main=project_main)
-    shell:
-        "multiqc {params.input_dir} -o {params.output_dir} 2> {log} && \
-        tar -zcvf {output} {params.output_dir} && \
-        rm -rf {params.output_dir}"
 
 rule call_variants:
     input:
