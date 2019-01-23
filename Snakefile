@@ -635,7 +635,7 @@ rule gatk_haplotype_caller:
     log:
         "{project_samples}/{sample}/logs/{sample}.HaplotypeCaller.log"
     params:
-        annotate=" ".join["--annotation-group " + ele for ele in config["gatk_annotations"]]
+        annotation=" ".join(["--annotation-group " + ele for ele in config["gatk_annotations"]]),
         max_reads=config["gatk_max_reads"],
         report_num_alleles=config["gatk_report_num_alleles"],
         max_num_alleles=config["gatk_max_num_alleles"],
@@ -682,15 +682,15 @@ rule collect_gvcfs:
         expand("{project_samples}/{sample}/variants/{sample}.g.vcf",
                  zip, project_samples=[project_samples, ]*len(samples_names),
                  sample=sorted(samples_names)),
-    output:
-        expand("{project_samples}/{sample}/variants/{sample}.g.vcf",
-                 zip, project_samples=[project_samples, ]*len(samples_names),
-                 sample=sorted(samples_names)),
+#    output:
+#        expand("{project_samples}/{sample}/variants/{sample}.g.vcf",
+#                 zip, project_samples=[project_samples, ]*len(samples_names),
+#                 sample=sorted(samples_names)),
 
 rule gatk_combine_gvcfs:
     priority: 500
     input:
-        vcfs=rules.collect_gvcfs.output,
+        vcfs=rules.collect_gvcfs.input,
         genome=ancient("{}.fa".format(project_genome)),
         genome_dict=ancient("{}.dict".format(project_genome)),
         variants=ancient("{}.vcf.gz".format(project_variants)),
@@ -702,8 +702,8 @@ rule gatk_combine_gvcfs:
         "{variants_dir}/logs/GATKCombineGVCFs.log"
     params:
         tmp_dir=config["tmp_dir"],
-        vcfs=" ".join(["-V {}".format(ele) for ele in rules.collect_gvcfs.output]),
-        annotate=" ".join["--annotation-group " + ele for ele in config["gatk_annotations"]]
+        vcfs=" ".join(["-V {}".format(ele) for ele in rules.collect_gvcfs.input]),
+        annotation=" ".join(["--annotation-group " + ele for ele in config["gatk_annotations"]])
     threads: threads_max
     resources:
         mem_mb=memory_max
@@ -732,7 +732,7 @@ rule gatk_genotype_gvcfs:
         vcf_idx=temp("{variants_dir}/var.raw.vcf.idx")
     log: "{variants_dir}/logs/GATKGenotypeGVCFs.log"
     params:
-        annotate=" ".join["--annotation-group " + ele for ele in config["gatk_annotations"]],
+        annotation=" ".join(["--annotation-group " + ele for ele in config["gatk_annotations"]]),
         report_num_alleles=config["gatk_report_num_alleles"],
         max_num_alleles=config["gatk_max_num_alleles"],
         tmp_dir = config["tmp_dir"]
@@ -980,21 +980,21 @@ rule call_variants:
         var_filtered_indel="{variants_dir}/var.ann.indel.filtered.vcf".format(variants_dir=variants_dir),
         var_rest="{variants_dir}/var.ann.rest.vcf".format(variants_dir=variants_dir)
 
-rule multiqc_for_variants:
-    input:
-        rules.snpeff_annotate_variants.output.summary,
-        rules.picard_collect_variant_calling_metrics.output.summary
-    output:
-        "{variants_dir}/MultiQCReportVariants.tar.gz".format(variants_dir=variants_dir)
-    log:
-        "{variants_dir}/logs/multiqc_variants_report.log"
-    params:
-        input_dir=variants_dir,
-        output_dir="{variants_dir}/MultiQCReportVariants/".format(variants_dir=variants_dir)
-    shell:
-        "multiqc {params.input_dir} -o {params.output_dir} 2> {log} && \
-        tar -zcvf {output} {params.output_dir} && \
-        rm -rf {params.output_dir}"
+#rule multiqc_for_variants:
+#    input:
+#        rules.snpeff_annotate_variants.output.summary,
+#        rules.picard_collect_variant_calling_metrics.output.summary
+#    output:
+#        "{variants_dir}/MultiQCReportVariants.tar.gz".format(variants_dir=variants_dir)
+#    log:
+#        "{variants_dir}/logs/multiqc_variants_report.log"
+#    params:
+#        input_dir=variants_dir,
+#        output_dir="{variants_dir}/MultiQCReportVariants/".format(variants_dir=variants_dir)
+#    shell:
+#        "multiqc {params.input_dir} -o {params.output_dir} 2> {log} && \
+#        tar -zcvf {output} {params.output_dir} && \
+#        rm -rf {params.output_dir}"
 
 #        picard_genotype_concordance_summary="{variants_dir}/metrics/var.raw.vcf.genotype_concordance_summary_metrics".format(variants_dir=variants_dir),
 #        picard_genotype_concordance_detail="{variants_dir}/metrics/var.raw.vcf.genotype_concordance_detail_metrics".format(variants_dir=variants_dir),

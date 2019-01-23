@@ -2,7 +2,7 @@
 
 set -eux
 
-DOCKER_IMAGE=grzadr/biosak:OPUS-2017-DSD_variant_calling
+DOCKER_IMAGE=grzadr/biosak:mapping
 
 THREADS=20
 DATA_DIR=${1}
