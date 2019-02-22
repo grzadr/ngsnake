@@ -621,7 +621,36 @@ rule multiqc:
         tar -zcvf {output} {params.output_dir} && \
         rm -rf {params.output_dir}"
 
-rule gatk_haplotype_caller:
+def generate_intervals():
+    intervals = []
+
+    for line in open(rules.prepare_genome_index.output.pop()):
+        chrom, size, *rest = line.rstrip().split("\t")
+        intervals.append("{}:1-{}".format(chrom, size))
+        if not chrom.tolower().lstrip("chr").isdecimal(): continue
+        print(chrom, size)
+
+    return intervals
+
+gatk_intervals_autosomes = generate_intervals()
+
+# TODO Specify heterosomes in config file
+# gatk_intervals_heterosomes = [ "X", ]
+#
+#
+def generate_ploidy_heterosomes(ploidy_file, sep="\t"):
+    ploidy_dict = {}
+
+    with open(ploidy_file, "r") as ploidy_input:
+        return {sample: int(ploidy)
+                for sample, ploidy in map(lambda x: x.split(sep.rstrip()),
+                                                            ploidy_input.readlines())}
+
+
+gatk_heterosomes_ploidy=generate_ploidy_heterosomes(config["gatk_heterosomes_ploidy"])
+
+
+rule gatk_haplotype_caller_heterosomes:
     priority: 900
     input:
         recal_bam=rules.gatk_apply_BQSR.output.bam,
@@ -631,9 +660,9 @@ rule gatk_haplotype_caller:
         variants=ancient("{}.vcf.gz".format(project_variants)),
         variants_index=ancient("{}.vcf.gz.tbi".format(project_variants)),
     output:
-        protected("{project_samples}/{sample}/variants/{sample}.g.vcf")
+        protected("{project_samples}/{sample}/variants/{sample}.heterosomes.g.vcf")
     log:
-        "{project_samples}/{sample}/logs/{sample}.HaplotypeCaller.log"
+        "{project_samples}/{sample}/logs/{sample}.HaplotypeCaller.Heterosomes.log"
     params:
         annotation=" ".join(["--annotation-group " + ele for ele in config["gatk_annotations"]]),
         max_reads=config["gatk_max_reads"],
@@ -643,6 +672,8 @@ rule gatk_haplotype_caller:
         max_assembly_size=config["gatk_max_assembly_size"],
         assembly_padding=config["gatk_assembly_padding"],
         tmp_dir = config["tmp_dir"]
+        intervals="-L X",
+        ploidy=lambda wildcards: gatk_heterosomes_ploidy[wildcards.sample]
     threads: 4
     resources:
         mem_mb=32768
@@ -660,6 +691,54 @@ rule gatk_haplotype_caller:
          --max-assembly-region-size {params.max_assembly_size} \
          --assembly-region-padding {params.assembly_padding} \
          --all-site-pls {params.all_site_pls} \
+         --sample-ploidy {params.ploidy} \
+         {params.intervals} \
+         {params.annotation} \
+         2> {log}"
+
+rule gatk_haplotype_caller_autosomes:
+    priority: 900
+    input:
+        recal_bam=rules.gatk_apply_BQSR.output.bam,
+        recal_bai=rules.samtools_index_recal.output,
+        genome=ancient("{}.fa".format(project_genome)),
+        genome_dict=ancient("{}.dict".format(project_genome)),
+        variants=ancient("{}.vcf.gz".format(project_variants)),
+        variants_index=ancient("{}.vcf.gz.tbi".format(project_variants)),
+    output:
+        protected("{project_samples}/{sample}/variants/{sample}.autosomes.g.vcf")
+    log:
+        "{project_samples}/{sample}/logs/{sample}.HaplotypeCaller.autosomes.log"
+    params:
+        annotation=" ".join(["--annotation-group " + ele for ele in config["gatk_annotations"]]),
+        max_reads=config["gatk_max_reads"],
+        report_num_alleles=config["gatk_report_num_alleles"],
+        max_num_alleles=config["gatk_max_num_alleles"],
+        all_site_pls=config["gatk_all_site_pls"],
+        max_assembly_size=config["gatk_max_assembly_size"],
+        assembly_padding=config["gatk_assembly_padding"],
+        tmp_dir = config["tmp_dir"],
+        intervals=["-L {}".format(ele) for ele in gatk_intervals_autosomes],
+        ploidy=2
+    threads: 4
+    resources:
+        mem_mb=32768
+    shell:
+         "gatk --java-options '-Xmx{resources.mem_mb}m' HaplotypeCaller \
+         -I {input.recal_bam} \
+         -R {input.genome} \
+         -O {output} \
+         --emit-ref-confidence GVCF \
+         --tmp-dir {params.tmp_dir} \
+         --dbsnp {input.variants} \
+         --max-reads-per-alignment-start {params.max_reads} \
+         --annotate-with-num-discovered-alleles {params.report_num_alleles} \
+         --max-alternate-alleles {params.max_num_alleles} \
+         --max-assembly-region-size {params.max_assembly_size} \
+         --assembly-region-padding {params.assembly_padding} \
+         --all-site-pls {params.all_site_pls} \
+         --sample-ploidy {params.ploidy} \
+         {params.intervals} \
          {params.annotation} \
          2> {log}"
 
@@ -679,9 +758,12 @@ rule gatk_create_gvcf_map_file:
 
 rule collect_gvcfs:
     input:
-        expand("{project_samples}/{sample}/variants/{sample}.g.vcf",
-                 zip, project_samples=[project_samples, ]*len(samples_names),
-                 sample=sorted(samples_names)),
+        autosomes=expand("{project_samples}/{sample}/variants/{sample}.autosomes.g.vcf",
+                         zip, project_samples=[project_samples, ]*len(samples_names),
+                         sample=sorted(samples_names)),
+        heterosomes=expand("{project_samples}/{sample}/variants/{sample}.heterosomes.g.vcf",
+                           zip, project_samples=[project_samples, ]*len(samples_names),
+                           sample=sorted(samples_names)),
 #    output:
 #        expand("{project_samples}/{sample}/variants/{sample}.g.vcf",
 #                 zip, project_samples=[project_samples, ]*len(samples_names),
@@ -690,7 +772,8 @@ rule collect_gvcfs:
 rule gatk_combine_gvcfs:
     priority: 500
     input:
-        vcfs=rules.collect_gvcfs.input,
+        vcfs_autosomes=rules.collect_gvcfs.input.autosomes,
+        vcfs_heterosomes=rules.collect_gvcfs.input.heterosomes,
         genome=ancient("{}.fa".format(project_genome)),
         genome_dict=ancient("{}.dict".format(project_genome)),
         variants=ancient("{}.vcf.gz".format(project_variants)),
@@ -702,7 +785,8 @@ rule gatk_combine_gvcfs:
         "{variants_dir}/logs/GATKCombineGVCFs.log"
     params:
         tmp_dir=config["tmp_dir"],
-        vcfs=" ".join(["-V {}".format(ele) for ele in rules.collect_gvcfs.input]),
+        vcfs=" ".join(["-V {}".format(ele) for ele in (rules.collect_gvcfs.input.autosomes +
+                                                       rules.collect_gvcfs.input.heterosomes)]),
         annotation=" ".join(["--annotation-group " + ele for ele in config["gatk_annotations"]])
     threads: threads_max
     resources:
@@ -821,15 +905,6 @@ rule gatk_index_annotated_variants:
         -F {input} \
         2> {log}"
 
-def generate_intervals():
-    intervals = []
-
-    for line in open(rules.prepare_genome_index.output.pop()):
-        chrom, size, *rest = line.rstrip().split("\t")
-        intervals.append("{}:1-{}".format(chrom, size))
-        if chrom == "MT": break
-
-    return intervals
 
 gatk_intervals=generate_intervals()
 
