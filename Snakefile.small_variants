@@ -671,7 +671,8 @@ rule gatk_haplotype_caller_heterosomes:
         all_site_pls=config["gatk_all_site_pls"],
         max_assembly_size=config["gatk_max_assembly_size"],
         assembly_padding=config["gatk_assembly_padding"],
-        tmp_dir = config["tmp_dir"]
+        tmp_dir = config["tmp_dir"],
+        # TODO GET INTERVALS AUTOMATICALLY (e.g. from config)
         intervals="-L X",
         ploidy=lambda wildcards: gatk_heterosomes_ploidy[wildcards.sample]
     threads: 4
@@ -742,19 +743,19 @@ rule gatk_haplotype_caller_autosomes:
          {params.annotation} \
          2> {log}"
 
-rule gatk_create_gvcf_map_file:
-    input:
-         expand("{project_samples}/{sample}/variants/{sample}.g.vcf",
-                 zip, project_samples=[project_samples, ]*len(samples_names),
-                 sample=sorted(samples_names))
-    output:
-        tsv="{variants_dir}/gvcf_map.tsv"
-    run:
-        map_file = open(output.tsv, "w")
-        for ele in input:
-            name = ele.split("/")[-1].split(".")[0]
-            print("{}\t{}".format(name, ele), file=map_file)
-        map_file.close()
+#rule gatk_create_gvcf_map_file:
+#    input:
+#         expand("{project_samples}/{sample}/variants/{sample}.g.vcf",
+#                 zip, project_samples=[project_samples, ]*len(samples_names),
+#                 sample=sorted(samples_names))
+#    output:
+#        tsv="{variants_dir}/gvcf_map.tsv"
+#    run:
+#        map_file = open(output.tsv, "w")
+#        for ele in input:
+#            name = ele.split("/")[-1].split(".")[0]
+#            print("{}\t{}".format(name, ele), file=map_file)
+#        map_file.close()
 
 rule collect_gvcfs:
     input:
