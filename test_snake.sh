@@ -2,7 +2,7 @@
 
 set -eux
 
-DOCKER_IMAGE=grzadr/biosak:latest
+DOCKER_IMAGE=grzadr/biosak:OPUS2017SmallVariantCalling
 NGSNAKE_DIR=${PWD}
 SNPEFF_DIR=/data/SnpEff
 

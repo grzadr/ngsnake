@@ -624,11 +624,12 @@ rule multiqc:
 def generate_intervals():
     intervals = []
 
-    for line in open(rules.prepare_genome_index.output.pop()):
+    print(rules.prepare_genome_index.output[0])
+
+    for line in open(rules.prepare_genome_index.output[0]):
         chrom, size, *rest = line.rstrip().split("\t")
         intervals.append("{}:1-{}".format(chrom, size))
-        if not chrom.tolower().lstrip("chr").isdecimal(): continue
-        print(chrom, size)
+        if not chrom.lower().lstrip("chr").isdecimal(): continue
 
     return intervals
 
@@ -643,7 +644,7 @@ def generate_ploidy_heterosomes(ploidy_file, sep="\t"):
 
     with open(ploidy_file, "r") as ploidy_input:
         return {sample: int(ploidy)
-                for sample, ploidy in map(lambda x: x.split(sep.rstrip()),
+                for sample, ploidy in map(lambda x: x.rstrip().split(sep),
                                                             ploidy_input.readlines())}
 
 
@@ -660,7 +661,8 @@ rule gatk_haplotype_caller_heterosomes:
         variants=ancient("{}.vcf.gz".format(project_variants)),
         variants_index=ancient("{}.vcf.gz.tbi".format(project_variants)),
     output:
-        protected("{project_samples}/{sample}/variants/{sample}.heterosomes.g.vcf")
+        vcf=protected("{project_samples}/{sample}/variants/{sample}.heterosomes.g.vcf"),
+        vcf_idx=protected("{project_samples}/{sample}/variants/{sample}.heterosomes.g.vcf.idx")
     log:
         "{project_samples}/{sample}/logs/{sample}.HaplotypeCaller.Heterosomes.log"
     params:
@@ -682,7 +684,7 @@ rule gatk_haplotype_caller_heterosomes:
          "gatk --java-options '-Xmx{resources.mem_mb}m' HaplotypeCaller \
          -I {input.recal_bam} \
          -R {input.genome} \
-         -O {output} \
+         -O {output.vcf} \
          --emit-ref-confidence GVCF \
          --tmp-dir {params.tmp_dir} \
          --dbsnp {input.variants} \
@@ -707,7 +709,8 @@ rule gatk_haplotype_caller_autosomes:
         variants=ancient("{}.vcf.gz".format(project_variants)),
         variants_index=ancient("{}.vcf.gz.tbi".format(project_variants)),
     output:
-        protected("{project_samples}/{sample}/variants/{sample}.autosomes.g.vcf")
+        vcf=protected("{project_samples}/{sample}/variants/{sample}.autosomes.g.vcf"),
+        vcf_idx=protected("{project_samples}/{sample}/variants/{sample}.autosomes.g.vcf.idx"),
     log:
         "{project_samples}/{sample}/logs/{sample}.HaplotypeCaller.autosomes.log"
     params:
@@ -728,7 +731,7 @@ rule gatk_haplotype_caller_autosomes:
          "gatk --java-options '-Xmx{resources.mem_mb}m' HaplotypeCaller \
          -I {input.recal_bam} \
          -R {input.genome} \
-         -O {output} \
+         -O {output.vcf} \
          --emit-ref-confidence GVCF \
          --tmp-dir {params.tmp_dir} \
          --dbsnp {input.variants} \
@@ -763,6 +766,12 @@ rule collect_gvcfs:
                          zip, project_samples=[project_samples, ]*len(samples_names),
                          sample=sorted(samples_names)),
         heterosomes=expand("{project_samples}/{sample}/variants/{sample}.heterosomes.g.vcf",
+                           zip, project_samples=[project_samples, ]*len(samples_names),
+                           sample=sorted(samples_names)),
+        autosomes_idx=expand("{project_samples}/{sample}/variants/{sample}.autosomes.g.vcf.idx",
+                         zip, project_samples=[project_samples, ]*len(samples_names),
+                         sample=sorted(samples_names)),
+        heterosomes_idx=expand("{project_samples}/{sample}/variants/{sample}.heterosomes.g.vcf.idx",
                            zip, project_samples=[project_samples, ]*len(samples_names),
                            sample=sorted(samples_names)),
 #    output:
@@ -906,9 +915,6 @@ rule gatk_index_annotated_variants:
         -F {input} \
         2> {log}"
 
-
-gatk_intervals=generate_intervals()
-
 rule gatk_exclude_strange:
     priority: 500
     input:
@@ -921,7 +927,7 @@ rule gatk_exclude_strange:
     log:
         "{variants_dir}/logs/GATKExcludeStrange.log"
     params:
-        intervals=["-L {}".format(ele) for ele in gatk_intervals]
+        intervals=["-L {}".format(ele) for ele in gatk_intervals_autosomes]
     threads: 1
     resources:
         mem_mb=8192
@@ -931,7 +937,6 @@ rule gatk_exclude_strange:
         -V {input.vcf} \
         -R {input.genome} \
         -O {output} \
-        {params.intervals} \
         --exclude-non-variants true \
         --select-type-to-exclude SNP \
         --select-type-to-exclude MNP \
@@ -950,7 +955,7 @@ rule gatk_select_snps:
     log:
         "{variants_dir}/logs/GATKSelectSNPs.log"
     params:
-        intervals=["-L {}".format(ele) for ele in gatk_intervals]
+        intervals=["-L {}".format(ele) for ele in gatk_intervals_autosomes]
     threads: 1
     resources:
         mem_mb=8192
@@ -960,7 +965,6 @@ rule gatk_select_snps:
         -V {input.vcf} \
         -R {input.genome} \
         -O {output} \
-        {params.intervals} \
         --exclude-non-variants true \
         --select-type-to-include SNP \
         --select-type-to-include MNP \
@@ -1007,7 +1011,7 @@ rule gatk_select_indels:
     log:
         "{variants_dir}/logs/GATKSelectInDels.log"
     params:
-        intervals=["-L {}".format(ele) for ele in gatk_intervals]
+        intervals=["-L {}".format(ele) for ele in gatk_intervals_autosomes]
     threads: 1
     resources:
         mem_mb=8192
