@@ -285,7 +285,7 @@ bait_bed="/".join((project_main, config["bait_intervals"] + ".bed"))
 bait_intervals="/".join((project_main, config["bait_intervals"] + ".intervals"))
 
 rule prepare_bait_intervals:
-    input: 
+    input:
         bed=bait_bed,
         genome_dict=rules.prepare_genome_dictionary.output
     output: bait_intervals
@@ -628,8 +628,8 @@ def generate_intervals():
 
     for line in open(rules.prepare_genome_index.output[0]):
         chrom, size, *rest = line.rstrip().split("\t")
-        intervals.append("{}:1-{}".format(chrom, size))
         if not chrom.lower().lstrip("chr").isdecimal(): continue
+        intervals.append("{}:1-{}".format(chrom, size))
 
     return intervals
 
@@ -951,11 +951,10 @@ rule gatk_select_snps:
         genome=ancient("{}.fa".format(project_genome)),
         genome_dict=ancient("{}.dict".format(project_genome)),
     output:
-        temp("{variants_dir}/var.ann.snp.vcf")
+        vcf=temp("{variants_dir}/var.ann.snp.vcf"),
+        vcf_idx=temp("{variants_dir}/var.ann.snp.vcf.idx")
     log:
         "{variants_dir}/logs/GATKSelectSNPs.log"
-    params:
-        intervals=["-L {}".format(ele) for ele in gatk_intervals_autosomes]
     threads: 1
     resources:
         mem_mb=8192
@@ -964,7 +963,7 @@ rule gatk_select_snps:
         SelectVariants \
         -V {input.vcf} \
         -R {input.genome} \
-        -O {output} \
+        -O {output.vcf} \
         --exclude-non-variants true \
         --select-type-to-include SNP \
         --select-type-to-include MNP \
@@ -973,11 +972,13 @@ rule gatk_select_snps:
 rule gatk_filter_snps:
     priority: 500
     input:
-        vcf=rules.gatk_select_snps.output,
+        vcf=rules.gatk_select_snps.output.vcf,
+        vcf_idx=rules.gatk_select_snps.output.vcf_idx,
         genome=ancient("{}.fa".format(project_genome)),
         genome_dict=ancient("{}.dict".format(project_genome)),
     output:
-        protected("{variants_dir}/var.ann.snp.filtered.vcf")
+        vcf=protected("{variants_dir}/var.ann.snp.filtered.vcf"),
+        vcf_idx=protected("{variants_dir}/var.ann.snp.filtered.vcf.idx")
     log:
         "{variants_dir}/logs/GATKFilterSNPs.log"
     threads: 1
@@ -988,7 +989,8 @@ rule gatk_filter_snps:
         VariantFiltration \
         -V {input.vcf} \
         -R {input.genome} \
-        -O {output} \
+        -O {output.vcf} \
+        --missing-values-evaluate-as-failing true \
         --filter-expression \"\
         QD < 2.0 || \
         FS > 60.0 || \
@@ -1007,11 +1009,10 @@ rule gatk_select_indels:
         genome=ancient("{}.fa".format(project_genome)),
         genome_dict=ancient("{}.dict".format(project_genome)),
     output:
-        temp("{variants_dir}/var.ann.indel.vcf")
+        vcf=temp("{variants_dir}/var.ann.indel.vcf"),
+        vcf_idx=temp("{variants_dir}/var.ann.indel.vcf.idx")
     log:
         "{variants_dir}/logs/GATKSelectInDels.log"
-    params:
-        intervals=["-L {}".format(ele) for ele in gatk_intervals_autosomes]
     threads: 1
     resources:
         mem_mb=8192
@@ -1020,8 +1021,7 @@ rule gatk_select_indels:
         SelectVariants \
         -V {input.vcf} \
         -R {input.genome} \
-        -O {output} \
-        {params.intervals} \
+        -O {output.vcf} \
         --exclude-non-variants true \
         --select-type-to-include INDEL \
         2> {log}"
@@ -1029,11 +1029,13 @@ rule gatk_select_indels:
 rule gatk_filter_indel:
     priority: 500
     input:
-        vcf=rules.gatk_select_indels.output,
+        vcf=rules.gatk_select_indels.output.vcf,
+        vcf_idx=rules.gatk_select_indels.output.vcf_idx,
         genome=ancient("{}.fa".format(project_genome)),
         genome_dict=ancient("{}.dict".format(project_genome)),
     output:
-        protected("{variants_dir}/var.ann.indel.filtered.vcf")
+        vcf=protected("{variants_dir}/var.ann.indel.filtered.vcf"),
+        vcf_idx=protected("{variants_dir}/var.ann.indel.filtered.vcf.idx"),
     log:
         "{variants_dir}/logs/GATKFilterInDels.log"
     threads: 1
@@ -1044,12 +1046,12 @@ rule gatk_filter_indel:
         VariantFiltration \
         -V {input.vcf} \
         -R {input.genome} \
-        -O {output} \
+        -O {output.vcf} \
+        --missing-values-evaluate-as-failing true \
         --filter-expression \"\
         QD < 2.0 || \
         FS > 200.0 || \
         ReadPosRankSum < -20.0 || \
-        InbreedingCoeff < -0.8 || \
         SOR > 10.0\" \
         --filter-name \"GENERIC_INDEL_FILTER\" \
         2> {log}"
