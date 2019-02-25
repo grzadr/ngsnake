@@ -15,6 +15,8 @@ variants_dir: "variants"
 bait_intervals: "bait_intervals"
 target_intervals: "target_intervals"
 
+gatk_autosomes_ploidy: 2
+gatk_heterosomes: ["X", ]
 gatk_heterosomes_ploidy: "/data/heterosomes_ploidy.tsv"
 gatk_max_reads: 100
 gatk_report_num_alleles: "true"

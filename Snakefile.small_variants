@@ -634,11 +634,9 @@ def generate_intervals():
     return intervals
 
 gatk_intervals_autosomes = generate_intervals()
+gatk_intervals_heterosomes = config["gatk_heterosomes"]
+gatk_intervals = gatk_intervals_autosomes + gatk_intervals_heterosomes
 
-# TODO Specify heterosomes in config file
-# gatk_intervals_heterosomes = [ "X", ]
-#
-#
 def generate_ploidy_heterosomes(ploidy_file, sep="\t"):
     ploidy_dict = {}
 
@@ -647,9 +645,8 @@ def generate_ploidy_heterosomes(ploidy_file, sep="\t"):
                 for sample, ploidy in map(lambda x: x.rstrip().split(sep),
                                                             ploidy_input.readlines())}
 
-
+gatk_autosomes_ploidy=config["gatk_autosomes_ploidy"]
 gatk_heterosomes_ploidy=generate_ploidy_heterosomes(config["gatk_heterosomes_ploidy"])
-
 
 rule gatk_haplotype_caller_heterosomes:
     priority: 900
@@ -674,9 +671,8 @@ rule gatk_haplotype_caller_heterosomes:
         max_assembly_size=config["gatk_max_assembly_size"],
         assembly_padding=config["gatk_assembly_padding"],
         tmp_dir = config["tmp_dir"],
-        # TODO GET INTERVALS AUTOMATICALLY (e.g. from config)
-        intervals="-L X",
-        ploidy=lambda wildcards: gatk_heterosomes_ploidy[wildcards.sample]
+        intervals=["-L {}".format(ele) for ele in gatk_intervals_heterosomes],
+        ploidy=lambda wildcards: gatk_heterosomes_ploidy.get(wildcards.sample, gatk_autosomes_ploidy)
     threads: 4
     resources:
         mem_mb=32768
@@ -723,7 +719,7 @@ rule gatk_haplotype_caller_autosomes:
         assembly_padding=config["gatk_assembly_padding"],
         tmp_dir = config["tmp_dir"],
         intervals=["-L {}".format(ele) for ele in gatk_intervals_autosomes],
-        ploidy=2
+        ploidy=gatk_autosomes_ploidy
     threads: 4
     resources:
         mem_mb=32768
