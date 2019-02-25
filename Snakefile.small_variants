@@ -33,7 +33,7 @@ snpeff_jar = "/opt/conda/share/snpeff-{}/snpEff.jar".format(snpeff_version.versi
 print("Using SnpEff version {}".format(snpeff_jar))
 
 def read_samples_names():
-    (dirs, ) = glob_wildcards(project_samples + "/{dir}")
+    (dirs, ) = glob_wildcards(project_samples + "/{dir, [\d\w]+}")
     dirs = [ele for ele in dirs if "/" not in ele]
     return dirs
 
@@ -306,7 +306,7 @@ target_bed="/".join((project_main, config["target_intervals"] + ".bed"))
 target_intervals="/".join((project_main, config["target_intervals"] + ".intervals"))
 
 rule prepare_target_intervals:
-    input: 
+    input:
         bed=target_bed,
         genome_dict=rules.prepare_genome_dictionary.output
     output: target_intervals

@@ -11,7 +11,7 @@ NGSNAKE_DIR=${PWD}
 SNPEFF_DIR=/data/SnpEff
 SNAKEMAKE_ARGS="${@:3}"
 
-docker pull ${DOCKER_IMAGE}
+#docker pull ${DOCKER_IMAGE}
 docker run -it \
   -v /etc/localtime:/etc/localtime:ro \
   -v ${DATA_DIR}:/data \
