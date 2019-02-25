@@ -649,7 +649,7 @@ gatk_autosomes_ploidy=config["gatk_autosomes_ploidy"]
 gatk_heterosomes_ploidy=generate_ploidy_heterosomes(config["gatk_heterosomes_ploidy"])
 
 rule gatk_haplotype_caller_heterosomes:
-    priority: 900
+    priority: 950
     input:
         recal_bam=rules.gatk_apply_BQSR.output.bam,
         recal_bai=rules.samtools_index_recal.output,
@@ -673,7 +673,7 @@ rule gatk_haplotype_caller_heterosomes:
         tmp_dir = config["tmp_dir"],
         intervals=["-L {}".format(ele) for ele in gatk_intervals_heterosomes],
         ploidy=lambda wildcards: gatk_heterosomes_ploidy.get(wildcards.sample, gatk_autosomes_ploidy)
-    threads: 4
+    threads: 2
     resources:
         mem_mb=32768
     shell:
@@ -720,7 +720,7 @@ rule gatk_haplotype_caller_autosomes:
         tmp_dir = config["tmp_dir"],
         intervals=["-L {}".format(ele) for ele in gatk_intervals_autosomes],
         ploidy=gatk_autosomes_ploidy
-    threads: 4
+    threads: 2
     resources:
         mem_mb=32768
     shell:
