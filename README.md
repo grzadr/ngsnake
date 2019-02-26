@@ -9,3 +9,9 @@
 
 ## _Detailed description_
 
+
+## _TODO_
+
+  ### 1. _Variant calling_
+  1. Replace GATK group annotation with specified names
+
