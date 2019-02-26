@@ -20,12 +20,6 @@ snpeff_database = config["snpeff_database"]
 
 project_logs = "/".join((project_main, "logs"))
 
-(picard_version) = glob_wildcards("/opt/conda/share/picard-{version}/picard.jar")
-if not len(picard_version.version):
-    raise ValueError("no Picard jar file found")
-picard_jar = "/opt/conda/share/picard-{}/picard.jar".format(picard_version.version[0])
-print("Using Picard version {}".format(picard_jar))
-
 (snpeff_version) = glob_wildcards("/opt/conda/share/snpeff-{version}/snpEff.jar")
 if not len(snpeff_version.version):
     raise ValueError("no SnpEff jar file found")
@@ -70,8 +64,6 @@ rule prepare_genome_dictionary:
         fai=rules.prepare_genome_index.output
     output:
         protected(project_genome + ".dict")
-    params:
-        picard_jar = picard_jar
     threads: 1
     run:
         "gatk CreateSequenceDictionary \
@@ -148,8 +140,6 @@ rule picard_mark_duplicates:
         marked_metrics=protected("{project_samples}/{sample}/metrics/{sample}.MarkDuplicates.txt")
     log:
         protected("{project_samples}/{sample}/logs/{sample}.MarkDuplicates.log")
-    params:
-        picard_jar=picard_jar
     threads: threads_max
     resources:
         mem_mb = memory_max
@@ -815,7 +805,6 @@ rule picard_collect_variant_calling_metrics:
     log:
         protected("{variants_dir}/logs/CollectVariantCallingMetrics.log")
     params:
-        picard_jar = picard_jar,
         prefix="{variants_dir}/metrics/var.raw.vcf"
     threads: threads_max
     resources:
