@@ -320,7 +320,7 @@ rule picard_hs_metrics:
         txt=protected("{project_samples}/{sample}/metrics/{sample}.HsMetrics.txt")
     log:
         protected("{project_samples}/{sample}/logs/{sample}.HsMetrics.log")
-    threads:2 
+    threads:2
     resources:
          mem_mb=16384
     shell:
@@ -537,7 +537,7 @@ rule multiqc_for_validation:
     shell:
         "multiqc {params.input_dir} -o {params.output_dir} > {log}"
 
-rule multiqc:
+rule multiqc_mapping_report:
     priority: 10000
     input:
         gc_bias_metrics=expand("{project_samples}/{sample}/metrics/"
@@ -698,7 +698,7 @@ rule gatk_haplotype_caller_autosomes:
         tmp_dir = config["tmp_dir"],
         intervals=["-L {}".format(ele) for ele in gatk_intervals_autosomes],
         ploidy=gatk_autosomes_ploidy
-    threads: 2
+    threads: 4
     resources:
         mem_mb=16384
     shell:
@@ -790,7 +790,7 @@ rule gatk_genotype_gvcfs:
     resources:
         mem_mb=memory_max
     shell:
-         "gatk --java-options '-Xmx{resources.mem_mb}m' \
+         "gatk --java-options '-Xmx{resources.mem_mb}m' -nt {threads} \
          GenotypeGVCFs \
          -V {input.vcf} \
          -R {input.genome} \
