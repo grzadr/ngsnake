@@ -24,6 +24,40 @@ gatk_max_num_alleles: 16
 gatk_all_site_pls: "true"
 gatk_max_assembly_size: 500
 gatk_assembly_padding: 150
-gatk_annotations: ["AS_StandardAnnotation", "ReducibleAnnotation"]
+gatk_annotation_groups: ["AS_StandardAnnotation", "ReducibleAnnotation"]
+gatk_annotations: [
+  "BaseQualityRankSumTest",
+  "AS_BaseQualityRankSumTest",
+  "FisherStrand",
+  "AS_FisherStrand",
+  "AS_MQMateRankSumTest",
+  "MappingQualityRankSumTest",
+  "AS_MappingQualityRankSumTest",
+  "RMSMappingQuality",
+  "AS_RMSMappingQuality",
+  "QualByDepth",
+  "AS_QualByDepth",
+  "StrandOddsRatio",
+  "AS_StrandOddsRatio",
+  "ReadPosRankSumTest",
+  "AS_ReadPosRankSumTest",
+  "ChromosomeCounts",
+  "ClippingRankSumTest",
+  "Coverage",
+  "DepthPerAlleleBySample",
+  "DepthPerSampleHC",
+  "FractionInformativeReads",
+  "HaplotypeScore",
+  "LikelihoodRankSumTest",
+  "LowMQ",
+  "MappingQualityZero",
+  "MappingQualityZeroBySample",
+  "QualByDepth",
+  "SampleList",
+  "StrandAlleleCountsBySample",
+  "StrandBiasBySample",
+  "TandemRepeatAnnotator",
+  "VariantType",
+]
 
 snpeff_database: "/SnpEff"

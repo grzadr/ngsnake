@@ -631,7 +631,7 @@ rule gatk_haplotype_caller_heterosomes:
     log:
         "{project_samples}/{sample}/logs/{sample}.HaplotypeCaller.Heterosomes.log"
     params:
-        annotation=" ".join(["--annotation-group " + ele for ele in config["gatk_annotations"]]),
+        annotation=" ".join(["--annotation " + ele for ele in config["gatk_annotations"]]),
         max_reads=config["gatk_max_reads"],
         report_num_alleles=config["gatk_report_num_alleles"],
         max_num_alleles=config["gatk_max_num_alleles"],
@@ -678,7 +678,7 @@ rule gatk_haplotype_caller_autosomes:
     log:
         "{project_samples}/{sample}/logs/{sample}.HaplotypeCaller.autosomes.log"
     params:
-        annotation=" ".join(["--annotation-group " + ele for ele in config["gatk_annotations"]]),
+        annotation=" ".join(["--annotation " + ele for ele in config["gatk_annotations"]]),
         max_reads=config["gatk_max_reads"],
         report_num_alleles=config["gatk_report_num_alleles"],
         max_num_alleles=config["gatk_max_num_alleles"],
