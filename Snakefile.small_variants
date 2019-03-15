@@ -743,7 +743,7 @@ rule gatk_combine_gvcfs:
         tmp_dir=config["tmp_dir"],
         vcfs=" ".join(["-V {}".format(ele) for ele in (rules.collect_gvcfs.input.autosomes +
                                                        rules.collect_gvcfs.input.heterosomes)]),
-        annotation=" ".join(["--annotation-group " + ele for ele in config["gatk_annotations"]])
+        annotation=" ".join(["--annotation " + ele for ele in config["gatk_annotations"]])
     threads: threads_max
     resources:
         mem_mb=memory_max
@@ -772,7 +772,7 @@ rule gatk_genotype_gvcfs:
         vcf_idx=temp("{variants_dir}/var.raw.vcf.idx")
     log: "{variants_dir}/logs/GATKGenotypeGVCFs.log"
     params:
-        annotation=" ".join(["--annotation-group " + ele for ele in config["gatk_annotations"]]),
+        annotation=" ".join(["--annotation " + ele for ele in config["gatk_annotations"]]),
         report_num_alleles=config["gatk_report_num_alleles"],
         max_num_alleles=config["gatk_max_num_alleles"],
         tmp_dir = config["tmp_dir"]
@@ -785,6 +785,7 @@ rule gatk_genotype_gvcfs:
          -V {input.vcf} \
          -R {input.genome} \
          -O {output.vcf} \
+         --verbosity INFO \
          --tmp-dir {params.tmp_dir} \
          --dbsnp {input.variants} \
          --annotate-with-num-discovered-alleles {params.report_num_alleles} \
