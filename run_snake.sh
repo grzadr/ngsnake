@@ -25,7 +25,7 @@ docker run -it \
   snakemake \
   -s "/ngsnake/${SNAKEFILE}" \
   --configfile /ngsnake/config.yaml \
-  --resources mem_mb=196608 \
+  --resources mem_mb=188416 \
   -pr -j ${THREADS} \
   ${SNAKEMAKE_ARGS}
 

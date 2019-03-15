@@ -790,7 +790,7 @@ rule gatk_genotype_gvcfs:
     resources:
         mem_mb=memory_max
     shell:
-         "gatk --java-options '-Xmx{resources.mem_mb}m' -nt {threads} \
+         "gatk --java-options '-Xmx{resources.mem_mb}m' \
          GenotypeGVCFs \
          -V {input.vcf} \
          -R {input.genome} \
