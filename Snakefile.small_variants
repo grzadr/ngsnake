@@ -936,14 +936,18 @@ rule gatk_filter_snps:
         -R {input.genome} \
         -O {output.vcf} \
         --missing-values-evaluate-as-failing true \
-        --filter-expression \"\
-        QD < 2.0 || \
-        FS > 60.0 || \
-        MQ < 40.0 || \
-        MQRankSum < -12.5 || \
-        ReadPosRankSum < -8.0 || \
-        SOR > 3.0\" \
-        --filter-name \"GENERIC_SNP_FILTER\" \
+        --filter-expression \"QD < 2.0\" \
+        --filter-name \"LOW_QD\" \
+        --filter-expression \"FS > 60.0\" \
+        --filter-name \"HIGH_FS\" \
+        --filter-expression \"ReadPosRankSum < -8.0\" \
+        --filter-name \"LOW_ReadPosRankSum\" \
+        --filter-expression \"SOR > 3.0\" \
+        --filter-name \"HIGH_SOR\" \
+        --filter-expression \"MQ < 40.0\" \
+        --filter-name \"LOW_MQ\" \
+        --filter-expression \"MQRankSum < -12.5\" \
+        --filter-name \"LOW_MQRankSum\" \
         2> {log}"
 
 rule gatk_select_indels:
@@ -993,12 +997,14 @@ rule gatk_filter_indel:
         -R {input.genome} \
         -O {output.vcf} \
         --missing-values-evaluate-as-failing true \
-        --filter-expression \"\
-        QD < 2.0 || \
-        FS > 200.0 || \
-        ReadPosRankSum < -20.0 || \
-        SOR > 10.0\" \
-        --filter-name \"GENERIC_INDEL_FILTER\" \
+        --filter-expression \"QD < 2.0\" \
+        --filter-name \"LOW_QD\" \
+        --filter-expression \"FS > 200.0\" \
+        --filter-name \"HIGH_FS\" \
+        --filter-expression \"ReadPosRankSum < -20.0\" \
+        --filter-name \"LOW_ReadPosRankSum\" \
+        --filter-expression \"SOR > 10.0\" \
+        --filter-name \"HIGH_SOR\" \
         2> {log}"
 
 rule call_variants:

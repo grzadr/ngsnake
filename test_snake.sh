@@ -2,7 +2,7 @@
 
 set -eux
 
-DOCKER_IMAGE=grzadr/biosak:2019-03-14
+DOCKER_IMAGE=grzadr/biosak:19-03-16
 NGSNAKE_DIR=${PWD}
 SNPEFF_DIR=/data/SnpEff
 
