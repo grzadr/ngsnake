@@ -785,11 +785,11 @@ rule gatk_genotype_gvcfs:
          -V {input.vcf} \
          -R {input.genome} \
          -O {output.vcf} \
-         --verbosity INFO \
          --tmp-dir {params.tmp_dir} \
          --dbsnp {input.variants} \
          --annotate-with-num-discovered-alleles {params.report_num_alleles} \
          --max-alternate-alleles {params.max_num_alleles} \
+         --use-new-qual-calculator true \
          {params.annotation} \
          2> {log}"
 
