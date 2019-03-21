@@ -44,11 +44,11 @@ gatk_annotations: [
   "ClippingRankSumTest",
   "Coverage",
   "DepthPerAlleleBySample",
-  #  "DepthPerSampleHC",
+  "DepthPerSampleHC",
   "LikelihoodRankSumTest",
   "MappingQualityZero",
   "SampleList",
-  #"StrandBiasBySample",
+  "StrandBiasBySample",
   "TandemRepeat",
 ]
 

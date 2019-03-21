@@ -605,13 +605,19 @@ gatk_intervals_autosomes = generate_intervals()
 gatk_intervals_heterosomes = config["gatk_heterosomes"]
 gatk_intervals = gatk_intervals_autosomes + gatk_intervals_heterosomes
 
+from os import path
+
 def generate_ploidy_heterosomes(ploidy_file, sep="\t"):
     ploidy_dict = {}
 
-    with open(ploidy_file, "r") as ploidy_input:
-        return {sample: int(ploidy)
-                for sample, ploidy in map(lambda x: x.rstrip().split(sep),
-                                                            ploidy_input.readlines())}
+    if path.isfile(ploidy_file):
+
+        with open(ploidy_file, "r") as ploidy_input:
+            return {sample: int(ploidy)
+                    for sample, ploidy in map(lambda x: x.rstrip().split(sep),
+                      ploidy_input.readlines())}
+    else:
+      return {}
 
 gatk_autosomes_ploidy=config["gatk_autosomes_ploidy"]
 gatk_heterosomes_ploidy=generate_ploidy_heterosomes(config["gatk_heterosomes_ploidy"])
