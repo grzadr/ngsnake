@@ -145,9 +145,9 @@ rule picard_mark_duplicates:
         mem_mb = memory_max
     shell:
         "gatk --java-options '-Xmx{resources.mem_mb}m' MarkDuplicates \
-         I={input.sorted_bam} \
-         O={output.marked_bam} \
-         M={output.marked_metrics} \
+         -I {input.sorted_bam} \
+         -O {output.marked_bam} \
+         -M {output.marked_metrics} \
          2> {log}"
 
 rule samtools_index_marked:
@@ -216,10 +216,11 @@ rule picard_size_metrics:
         mem_mb = 8192
     shell:
         "gatk --java-options '-Xmx{resources.mem_mb}m' CollectInsertSizeMetrics \
-        I={input.marked_bam} \
-        O={output.txt} \
-        H={output.pdf} \
-        M=0.5 2> {log}"
+        -I {input.marked_bam} \
+        -O {output.txt} \
+        -H {output.pdf} \
+        -M 0.5 \
+        2> {log}"
 
 rule picard_alignment_summary:
     priority: 1500
@@ -237,9 +238,9 @@ rule picard_alignment_summary:
         mem_mb = 8192
     shell:
         "gatk --java-options '-Xmx{resources.mem_mb}m' CollectAlignmentSummaryMetrics \
-        R={input.genome} \
-        I={input.marked_bam} \
-        O={output.txt} 2> {log}"
+        -R {input.genome} \
+        -I {input.marked_bam} \
+        -O {output.txt} 2> {log}"
 
 rule picard_wgs_metrics:
     priority: 1500
@@ -257,9 +258,9 @@ rule picard_wgs_metrics:
         mem_mb = 32768
     shell:
         "gatk --java-options '-Xmx{resources.mem_mb}m' CollectWgsMetrics \
-        R={input.genome} \
-        I={input.marked_bam} \
-        O={output.txt} 2> {log}"
+        -R {input.genome} \
+        -I {input.marked_bam} \
+        -O {output.txt} 2> {log}"
 
 bait_bed="/".join((project_main, config["bait_intervals"] + ".bed"))
 bait_intervals="/".join((project_main, config["bait_intervals"] + ".intervals"))
@@ -274,9 +275,9 @@ rule prepare_bait_intervals:
     resources: mem_mb=8192
     shell:
         "gatk --java-options '-Xmx{resources.mem_mb}m' BedToIntervalList \
-        I={input.bed} \
-        SD={input.genome_dict} \
-        O={output} \
+        -I {input.bed} \
+        -SD {input.genome_dict} \
+        -O {output} \
         2> {log}"
 
 target_bed="/".join((project_main, config["target_intervals"] + ".bed"))
@@ -292,9 +293,9 @@ rule prepare_target_intervals:
     resources: mem_mb=8192
     shell:
         "gatk --java-options '-Xmx{resources.mem_mb}m' BedToIntervalList \
-        I={input.bed} \
-        SD={input.genome_dict} \
-        O={output} \
+        -I {input.bed} \
+        -SD {input.genome_dict} \
+        -O {output} \
         2> {log}"
 
 rule picard_hs_metrics:
@@ -315,11 +316,11 @@ rule picard_hs_metrics:
          mem_mb=16384
     shell:
           "gatk --java-options '-Xmx{resources.mem_mb}m' CollectHsMetrics \
-          R={input.genome} \
-          I={input.marked_bam} \
-          TARGET_INTERVALS={input.target_intervals} \
-          BAIT_INTERVALS={input.bait_intervals} \
-          O={output.txt}\
+          -R {input.genome} \
+          -I {input.marked_bam} \
+          -TARGET_INTERVALS {input.target_intervals} \
+          -BAIT_INTERVALS {input.bait_intervals} \
+          -O {output.txt}\
           2> {log}"
 
 rule picard_gc_bias_metrics:
@@ -340,11 +341,11 @@ rule picard_gc_bias_metrics:
         mem_mb = 8192
     shell:
         "gatk --java-options '-Xmx{resources.mem_mb}m' CollectGcBiasMetrics \
-         R={input.genome} \
-         I={input.marked_bam} \
-         O={output.metrics} \
-         S={output.summary} \
-         CHART={output.chart} 2> {log}"
+         -R {input.genome} \
+         -I {input.marked_bam} \
+         -O {output.metrics} \
+         -S {output.summary} \
+         -CHART {output.chart} 2> {log}"
 
 rule picard_validate_sam_file:
     priority: 1500
@@ -362,8 +363,8 @@ rule picard_validate_sam_file:
         mem_mb = 8192
     shell:
         "gatk --java-options '-Xmx{resources.mem_mb}m' ValidateSamFile \
-         I={input.marked_bam} OUTPUT={output.txt} \
-         R={input.genome} MODE='VERBOSE' 2> {log}"
+         -I {input.marked_bam} OUTPUT={output.txt} \
+         -R {input.genome} MODE='VERBOSE' 2> {log}"
 
 rule gatk_index_variants:
     input:
@@ -577,17 +578,27 @@ rule multiqc_mapping_report:
                            zip,
                            project_samples=[project_samples, ]*len(samples_names),
                            sample=sorted(samples_names))
+#    output:
+#        "{project_main}/MultiQCReport.tar.gz"
     output:
-        "{project_main}/MultiQCReport.tar.gz"
+        directory("{project_main}/MultiQCReport")
     log:
         "{project_main}/logs/multiqc_report.log"
     params:
         input_dir=project_samples,
-        output_dir="{project_main}/MultiQCReport/".format(project_main=project_main)
+        #output_dir="{project_main}/MultiQCReport/".format(project_main=project_main)
     shell:
-        "multiqc {params.input_dir} -o {params.output_dir} 2> {log} && \
-        tar -zcvf {output} {params.output_dir} && \
-        rm -rf {params.output_dir}"
+        "multiqc {params.input_dir} -o {output} 2> {log}"
+        #tar -zcvf {output} {params.output_dir} && \
+        #rm -rf {params.output_dir}"
+
+rule archive_mapping_report:
+    priority:10000
+    input: rules.multiqc_mapping_report.output
+    #input:"{project_main}/MultiQCReport"
+    output: "{project_main}/MultiQCReport.tar.gz"
+    shell:
+        "tar -zcvf {output} {input}"
 
 def generate_intervals():
     intervals = []
@@ -818,9 +829,9 @@ rule picard_collect_variant_calling_metrics:
         mem_mb=memory_max
     shell:
         "gatk --java-options '-Xmx{resources.mem_mb}m' CollectVariantCallingMetrics \
-        I={input.vcf} \
-        DBSNP={input.variants} \
-        O={params.prefix} \
+        -I {input.vcf} \
+        -DBSNP {input.variants} \
+        -O {params.prefix} \
         2> {log}"
 
 rule snpeff_annotate_variants:
