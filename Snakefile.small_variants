@@ -952,7 +952,7 @@ rule gatk_filter_snps:
         -V {input.vcf} \
         -R {input.genome} \
         -O {output.vcf} \
-        --missing-values-evaluate-as-failing true \
+        --missing-values-evaluate-as-failing false \
         --filter-expression \"QD < 2.0\" \
         --filter-name \"LOW_QD\" \
         --filter-expression \"FS > 60.0\" \
@@ -1013,7 +1013,7 @@ rule gatk_filter_indel:
         -V {input.vcf} \
         -R {input.genome} \
         -O {output.vcf} \
-        --missing-values-evaluate-as-failing true \
+        --missing-values-evaluate-as-failing false \
         --filter-expression \"QD < 2.0\" \
         --filter-name \"LOW_QD\" \
         --filter-expression \"FS > 200.0\" \
