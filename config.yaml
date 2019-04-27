@@ -48,7 +48,6 @@ gatk_annotations: [
   "LikelihoodRankSumTest",
   "MappingQualityZero",
   "SampleList",
-  "StrandBiasBySample",
   "TandemRepeat",
 ]
 
