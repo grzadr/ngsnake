@@ -2,7 +2,7 @@
 
 set -eux
 
-DOCKER_IMAGE=grzadr/biosak:OPUS2017SmallVariantCalling
+DOCKER_IMAGE="grzadr/biosak:OPUS-DSD-2017-SmallVariantCalling"
 
 THREADS=20
 DATA_DIR=${1}
