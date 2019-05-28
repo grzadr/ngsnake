@@ -2,20 +2,23 @@
 
 set -eux
 
-DOCKER_IMAGE="grzadr/biosak:OPUS-DSD-2017-SmallVariantCalling"
+DOCKER_IMAGE_TAG="${1}"
+DATA_DIR=${2}
+SNAKE_FILE=${3}
+SNAKE_CONFIG=${4}
+SNAKE_ARGS="${@:5}"
 
-THREADS=20
-DATA_DIR=${1}
-SNAKEFILE=${2}
-NGSNAKE_DIR=${PWD}
+DOCKER_IMAGE="grzadr/biosak:${DOCKER_IMAGE_TAG}"
+SNAKE_THREADS=20
+SNAKE_MEMORY=188416
+SNAKE_DIR=${PWD}
 SNPEFF_DIR=/data/SnpEff
-SNAKEMAKE_ARGS="${@:3}"
 
 #docker pull ${DOCKER_IMAGE}
 docker run -it \
   -v /etc/localtime:/etc/localtime:ro \
   -v ${DATA_DIR}:/data \
-  -v ${NGSNAKE_DIR}:/ngsnake \
+  -v ${SNAKE_DIR}:/ngsnake \
   -v ${SNPEFF_DIR}:/SnpEff \
   -w /data \
   --name ngsnake_mapping \
@@ -23,9 +26,9 @@ docker run -it \
   -v /tmp:/tmp:rw \
   ${DOCKER_IMAGE} \
   snakemake \
-  -s "/ngsnake/${SNAKEFILE}" \
-  --configfile /ngsnake/config.yaml \
-  --resources mem_mb=188416 \
-  -pr -j ${THREADS} \
-  ${SNAKEMAKE_ARGS}
+  -s "/ngsnake/${SNAKE_FILE}" \
+  --configfile "/ngsnake/${SNAKE_CONFIG}" \
+  --resources mem_mb=${SNAKE_MEMORY} \
+  -pr -j ${SNAKE_THREADS} \
+  ${SNAKE_ARGS}
 
