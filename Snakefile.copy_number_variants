@@ -1,0 +1,49 @@
+genome_prefix=config["genome_prefix"]
+
+project_main = config["project_dir"]
+project_genome = "/".join((project_main, config["genome_dir"], genome_prefix))
+project_samples = "/".join((project_main, config["samples_dir"]))
+
+result_cnv_dir = "/".join((project_main, config["result_cnv_dir"]))
+snpeff_database = config["snpeff_database"]
+
+project_logs = "/".join((project_main, "logs"))
+
+samples_names = read_samples_names()
+
+print("{} samples loaded".format(len(samples_names)))
+print(*samples_names, sep=", ")
+
+threads_max = config["threads_max"]
+memory_max = config["memory_max"]
+
+def read_samples_names():
+    (dirs, ) = glob_wildcards(project_samples + "/{dir, [\d\w]+}")
+    dirs = [ele for ele in dirs if "/" not in ele]
+    return dirs
+
+
+rule cnvnator_create_root_files:
+    input:
+        bam="{project_samples}/{sample}/{sample}.bam"
+        bai="{project_samples}/{sample}/{sample}.bam.bai"
+    output:
+        cnvnator_root=protected("{project_samples}/{sample}/cnvs/cnvnator/{sample}.root")
+    log:
+        protected("{project_samples}/{sample}/logs/{sample}.CNVnator.RootGen.log")
+    threads: 1
+    shell:
+        "touch {output}"
+
+rule detect_cnv_with_cnvnator:
+    input: "{project_samples}/{sample}/cnvs/cnvnator/{sample.root}"
+    output: expand("{project_samples}/{sample}/cnvs/cnvnator/{sample}.cnvs",
+                   zip,
+                   project_samples=[project_samples, ]*len(samples_names),
+                   sample=sorted(samples_names))
+    shell:
+        "touch {output}"
+
+
+
+
