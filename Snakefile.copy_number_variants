@@ -2,6 +2,9 @@ genome_prefix=config["genome_prefix"]
 
 project_main = config["project_dir"]
 project_genome = "/".join((project_main, config["genome_dir"], genome_prefix))
+project_genome_chroms = "/".join((project_main,
+                                  config["genome_dir"],
+                                  config["genome_chrom_dir"]))
 project_samples = "/".join((project_main, config["samples_dir"]))
 
 result_cnv_dir = "/".join((project_main, config["result_cnv_dir"]))
@@ -27,30 +30,91 @@ rule cnvnator_create_root_files:
         bam="{project_samples}/{sample}/{sample}.bam",
         bai="{project_samples}/{sample}/{sample}.bam.bai"
     output:
-        root=protected("{project_samples}/{sample}/cnvs/cnvnator/{sample}.root")
+        root="{project_samples}/{sample}/cnvs/cnvnator/{sample}.init.{bin_size}.root"
     log:
-        root=protected("{project_samples}/{sample}/cnvs/cnvnator/logs/{sample}.CNVnator.RootGen.log")
+        stderr="{project_samples}/{sample}/cnvs/cnvnator/logs/{sample}.CNVnator.{bin_size}.CreateRoot.err",
+        stdout="{project_samples}/{sample}/cnvs/cnvnator/logs/{sample}.CNVnator.{bin_size}.CreateRoor.log"
     threads: 1
     resources:
-        mem_mb=16384
+        mem_mb=12288
     shell:
-        "cnvnator -root {output.root} -tree {input.bam} -lite > {log.root}"
+        "(cnvnator -root {output.root} -tree {input.bam} -lite > {log.stdout}) 2> {log.stderr}"
+
+rule cnvnator_generate_histogram:
+    input:
+        root=rules.cnvnator_create_root_files.output.root
+    output:
+        root="{project_samples}/{sample}/cnvs/cnvnator/{sample}.his.{bin_size}.root"
+    log:
+        stderr="{project_samples}/{sample}/cnvs/cnvnator/logs/{sample}.CNVnator.{bin_size}.GenerateHistogram.err",
+        stdout="{project_samples}/{sample}/cnvs/cnvnator/logs/{sample}.CNVnator.{bin_size}.GenerateHistogram.log"
+    threads: 1
+    resources:
+        mem_mb=4096
+    params:
+#        bin_size=config["cnvnator_bin_size"],
+        chroms=project_genome_chroms
+    shell:
+        "cp {input.root} {output.root} && \
+        (cnvnator -root {output.root} -his {wildcards.bin_size} -d {params.chroms} > {log.stdout}) 2> {log.stderr}"
+
+rule cnvnator_calculate_statistics:
+    input:
+        root=rules.cnvnator_generate_histogram.output.root
+    output:
+        root="{project_samples}/{sample}/cnvs/cnvnator/{sample}.stat.{bin_size}.root"
+    log:
+        stderr="{project_samples}/{sample}/cnvs/cnvnator/logs/{sample}.CNVnator.{bin_size}.CalculateStatistics.err",
+        stdout="{project_samples}/{sample}/cnvs/cnvnator/logs/{sample}.CNVnator.{bin_size}.CalculateStatistics.log"
+    threads: 1
+    resources:
+        mem_mb=4096
+    params:
+        bin_size=config["cnvnator_bin_size"],
+        chroms=project_genome_chroms
+    shell:
+        "cp {input.root} {output.root} && \
+        (cnvnator -root {output.root} -stat {wildcards.bin_size} -d {params.chroms} > {log.stdout}) 2> {log.stderr}"
+
+rule cnvnator_signal_partitioning:
+    input:
+        root=rules.cnvnator_calculate_statistics.output.root
+    output:
+        root="{project_samples}/{sample}/cnvs/cnvnator/{sample}.part.{bin_size}.root"
+    log:
+        stderr="{project_samples}/{sample}/cnvs/cnvnator/logs/{sample}.CNVnator.{bin_size}.SignalPartitioning.err",
+        stdout="{project_samples}/{sample}/cnvs/cnvnator/logs/{sample}.CNVnator.{bin_size}.SignalPartitioning.log"
+    threads: 1
+    resources:
+        mem_mb=4096
+    params:
+#        bin_size=config["cnvnator_bin_size"],
+        chroms=project_genome_chroms
+    shell:
+        "cp {input.root} {output.root} && \
+        (cnvnator -root {output.root} -partition {wildcards.bin_size} -d {params.chroms} > {log.stdout}) 2> {log.stderr}"
 
 rule cnvnator_call_cnvs:
     input:
-#        cnvnator_root="{project_samples}/{sample}/cnvs/cnvnator/{sample}.root"
-        root=rules.cnvnator_create_root_files.output.root
+        root=rules.cnvnator_signal_partitioning.output.root
     output:
-        cnvnator_cnvs="{project_samples}/{sample}/cnvs/cnvnator/{sample}.cnvs"
+        tsv=protected("{project_samples}/{sample}/cnvs/cnvnator/{sample}.cnvnator.{bin_size}.tsv")
+    log:
+        stderr="{project_samples}/{sample}/cnvs/cnvnator/logs/{sample}.CNVnator.{bin_size}.CallCNVs.err",
     threads: 1
+    resources:
+        mem_mb=4096
+    params:
+#        bin_size=config["cnvnator_bin_size"],
+        chroms=project_genome_chroms
     shell:
-        "touch {output}"
+        "(cnvnator -root {input.root} -call {wildcards.bin_size} -d {params.chroms} > {output.tsv}) 2> {log.stderr}"
 
-rule detect_cnv_with_cnvnator:
+rule detect_copy_number_variants:
     input:
-        root=expand("{project_samples}/{sample}/cnvs/cnvnator/{sample}.root",
+        root=expand("{project_samples}/{sample}/cnvs/cnvnator/{sample}.cnvnator.{bin_size}.tsv",
                     zip,
                     project_samples=[project_samples, ]*len(samples_names),
+                    bin_size=[config["cnvnator_bin_size"], ] * len(samples_names),
                     sample=sorted(samples_names))
-
 

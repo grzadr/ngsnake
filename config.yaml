@@ -9,6 +9,7 @@ project_dir: "/data"
 samples_dir: "samples"
 reads_dir: "reads"
 genome_dir: "genome"
+genome_chrom_dir: "Chromosomes"
 genome_prefix: "CanFam3.1.Ensembl.94"
 variants_dir: "variants"
 result_cnv_dir: "results_cnvs"
@@ -53,3 +54,6 @@ gatk_annotations: [
 ]
 
 snpeff_database: "/SnpEff"
+
+
+cnvnator_bin_size: 1000
