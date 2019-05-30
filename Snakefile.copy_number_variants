@@ -5,14 +5,9 @@ project_genome = "/".join((project_main, config["genome_dir"], genome_prefix))
 project_samples = "/".join((project_main, config["samples_dir"]))
 
 result_cnv_dir = "/".join((project_main, config["result_cnv_dir"]))
-snpeff_database = config["snpeff_database"]
 
 project_logs = "/".join((project_main, "logs"))
 
-samples_names = read_samples_names()
-
-print("{} samples loaded".format(len(samples_names)))
-print(*samples_names, sep=", ")
 
 threads_max = config["threads_max"]
 memory_max = config["memory_max"]
@@ -22,28 +17,40 @@ def read_samples_names():
     dirs = [ele for ele in dirs if "/" not in ele]
     return dirs
 
+samples_names = read_samples_names()
+
+print("{} samples loaded".format(len(samples_names)))
+print(*samples_names, sep=", ")
 
 rule cnvnator_create_root_files:
     input:
-        bam="{project_samples}/{sample}/{sample}.bam"
+        bam="{project_samples}/{sample}/{sample}.bam",
         bai="{project_samples}/{sample}/{sample}.bam.bai"
     output:
-        cnvnator_root=protected("{project_samples}/{sample}/cnvs/cnvnator/{sample}.root")
+        root=protected("{project_samples}/{sample}/cnvs/cnvnator/{sample}.root")
     log:
-        protected("{project_samples}/{sample}/logs/{sample}.CNVnator.RootGen.log")
+        root=protected("{project_samples}/{sample}/cnvs/cnvnator/logs/{sample}.CNVnator.RootGen.log")
+    threads: 1
+    resources:
+        mem_mb=16384
+    shell:
+        "cnvnator -root {output.root} -tree {input.bam} -lite > {log.root}"
+
+rule cnvnator_call_cnvs:
+    input:
+#        cnvnator_root="{project_samples}/{sample}/cnvs/cnvnator/{sample}.root"
+        root=rules.cnvnator_create_root_files.output.root
+    output:
+        cnvnator_cnvs="{project_samples}/{sample}/cnvs/cnvnator/{sample}.cnvs"
     threads: 1
     shell:
         "touch {output}"
 
 rule detect_cnv_with_cnvnator:
-    input: "{project_samples}/{sample}/cnvs/cnvnator/{sample.root}"
-    output: expand("{project_samples}/{sample}/cnvs/cnvnator/{sample}.cnvs",
-                   zip,
-                   project_samples=[project_samples, ]*len(samples_names),
-                   sample=sorted(samples_names))
-    shell:
-        "touch {output}"
-
-
+    input:
+        root=expand("{project_samples}/{sample}/cnvs/cnvnator/{sample}.root",
+                    zip,
+                    project_samples=[project_samples, ]*len(samples_names),
+                    sample=sorted(samples_names))
 
 

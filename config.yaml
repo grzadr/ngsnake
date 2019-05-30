@@ -11,6 +11,7 @@ reads_dir: "reads"
 genome_dir: "genome"
 genome_prefix: "CanFam3.1.Ensembl.94"
 variants_dir: "variants"
+result_cnv_dir: "results_cnvs"
 
 bait_intervals: "bait_intervals"
 target_intervals: "target_intervals"
