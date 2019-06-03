@@ -7,10 +7,9 @@ project_genome_chroms = "/".join((project_main,
                                   config["genome_chrom_dir"]))
 project_samples = "/".join((project_main, config["samples_dir"]))
 
-result_cnv_dir = "/".join((project_main, config["result_cnv_dir"]))
+results_cnv_dir = "/".join((project_main, config["result_cnv_dir"]))
 
 project_logs = "/".join((project_main, "logs"))
-
 
 threads_max = config["threads_max"]
 memory_max = config["memory_max"]
@@ -18,9 +17,10 @@ memory_max = config["memory_max"]
 def read_samples_names():
     (dirs, ) = glob_wildcards(project_samples + "/{dir, [\d\w]+}")
     dirs = [ele for ele in dirs if "/" not in ele]
-    return dirs
+    return sorted(dirs)
 
-samples_names = read_samples_names()
+#samples_names = read_samples_names()
+samples_names = ["CFA_242", "CFA_246"]
 
 print("{} samples loaded".format(len(samples_names)))
 print(*samples_names, sep=", ")
@@ -110,11 +110,98 @@ rule cnvnator_call_cnvs:
     shell:
         "(cnvnator -root {input.root} -call {wildcards.bin_size} -d {params.chroms} > {output.tsv}) 2> {log.stderr}"
 
+rule delly_call_sample_sv:
+    input:
+        bam="{project_samples}/{sample}/{sample}.bam",
+        bai="{project_samples}/{sample}/{sample}.bam.bai",
+        fasta=project_genome + ".fa"
+    output:
+        bcf="{project_samples}/{sample}/cnvs/delly/{sample}.delly.call.bcf"
+    threads: 1
+    resources:
+        mem_mb=8192
+    shell:
+        "delly call -g {input.fasta} -o {output.bcf} {input.bam}"
+
+rule delly_collect_sample_sv_calls:
+    input:
+        bcfs=expand("{project_samples}/{sample}/cnvs/delly/{sample}.delly.call.bcf",
+                     zip,
+                     project_samples=[project_samples, ]*len(samples_names),
+                     sample=sorted(samples_names)
+                    )
+
+rule delly_merge_sv_sample_calls:
+    input:
+        bcfs=rules.delly_collect_sample_sv_calls.input.bcfs
+    output:
+        bcf="{}/delly/delly.sites.bcf".format(results_cnv_dir)
+    params:
+        bcfs=" ".join(rules.delly_collect_sample_sv_calls.input.bcfs)
+    threads: threads_max
+    resources:
+        mem_mb=memory_max
+    shell:
+        "delly merge -o {output.bcf} {params.bcfs}"
+
+rule delly_genotype_samples:
+    input:
+        bcfs=rules.delly_call_sample_sv.output.bcf,
+        merged=rules.delly_merge_sv_sample_calls.output.bcf,
+        bam="{project_samples}/{sample}/{sample}.bam",
+        bai="{project_samples}/{sample}/{sample}.bam.bai",
+        fasta=project_genome + ".fa"
+    output:
+        bcf="{project_samples}/{sample}/cnvs/delly/{sample}.delly.genotyped.bcf"
+    threads: 1
+    resources:
+        mem_mb=8192
+    shell:
+        "delly call -g {input.fasta} -v {input.merged} -o {output.bcf} {input.bam}"
+
+rule delly_collect_sample_sv_genotypes:
+    input:
+        bcfs=expand("{project_samples}/{sample}/cnvs/delly/{sample}.delly.genotyped.bcf",
+                     zip,
+                     project_samples=[project_samples, ]*len(samples_names),
+                     sample=sorted(samples_names)
+                    )
+
+rule delly_merge_sv_samples_genotype:
+    input:
+        bcfs=rules.delly_collect_sample_sv_genotypes.input.bcfs
+    output:
+        bcf="{}/delly/delly.genotypes.bcf".format(results_cnv_dir)
+    params:
+        bcfs=" ".join(rules.delly_collect_sample_sv_genotypes.input.bcfs)
+    threads: threads_max
+    resources:
+        mem_mb=memory_max
+    shell:
+        "bcftools merge -m id -O b -o {output.bcf} {input.bcfs}"
+
+rule delly_filter_svs:
+    input:
+        bcf=rules.delly_merge_sv_samples_genotype.output.bcf
+    output:
+        bcf="{results_cnv_dir}/delly/delly.filtered.bcf"
+    threads: threads_max
+    resources:
+        mem_mb=memory_max
+    shell:
+        "delly filter -f germline -o {output.bcf} {input.bcf}"
+
+
+rule call_delly:
+    input:
+        expand("{results_cnv_dir}/delly/delly.filtered.bcf",
+               results_cnv_dir=results_cnv_dir)
+
 rule detect_copy_number_variants:
     input:
-        root=expand("{project_samples}/{sample}/cnvs/cnvnator/{sample}.cnvnator.{bin_size}.tsv",
-                    zip,
-                    project_samples=[project_samples, ]*len(samples_names),
-                    bin_size=[config["cnvnator_bin_size"], ] * len(samples_names),
-                    sample=sorted(samples_names))
+        cnvnator=expand("{project_samples}/{sample}/cnvs/cnvnator/{sample}.cnvnator.{bin_size}.tsv",
+                        zip,
+                        project_samples=[project_samples, ]*len(samples_names),
+                        bin_size=[config["cnvnator_bin_size"], ] * len(samples_names),
+                        sample=sorted(samples_names))
 
