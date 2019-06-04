@@ -110,92 +110,117 @@ rule cnvnator_call_cnvs:
     shell:
         "(cnvnator -root {input.root} -call {wildcards.bin_size} -d {params.chroms} > {output.tsv}) 2> {log.stderr}"
 
-rule delly_call_sample_sv:
-    input:
-        bam="{project_samples}/{sample}/{sample}.bam",
-        bai="{project_samples}/{sample}/{sample}.bam.bai",
-        fasta=project_genome + ".fa"
-    output:
-        bcf="{project_samples}/{sample}/cnvs/delly/{sample}.delly.call.bcf"
-    threads: 1
-    resources:
-        mem_mb=8192
-    shell:
-        "delly call -g {input.fasta} -o {output.bcf} {input.bam}"
-
-rule delly_collect_sample_sv_calls:
-    input:
-        bcfs=expand("{project_samples}/{sample}/cnvs/delly/{sample}.delly.call.bcf",
-                     zip,
-                     project_samples=[project_samples, ]*len(samples_names),
-                     sample=sorted(samples_names)
-                    )
-
-rule delly_merge_sv_sample_calls:
-    input:
-        bcfs=rules.delly_collect_sample_sv_calls.input.bcfs
-    output:
-        bcf="{}/delly/delly.sites.bcf".format(results_cnv_dir)
-    params:
-        bcfs=" ".join(rules.delly_collect_sample_sv_calls.input.bcfs)
-    threads: threads_max
-    resources:
-        mem_mb=memory_max
-    shell:
-        "delly merge -o {output.bcf} {params.bcfs}"
-
+#rule delly_call_sample_sv:
+#    input:
+#        bam="{project_samples}/{sample}/{sample}.bam",
+#        bai="{project_samples}/{sample}/{sample}.bam.bai",
+#        fasta=project_genome + ".fa"
+#    output:
+#        bcf="{project_samples}/{sample}/cnvs/delly/{sample}.delly.{delly_type}.call.bcf"
+#    threads: 1
+#    resources:
+#        mem_mb=8192
+#    shell:
+#        "delly call -t {wildcards.delly_type} -g {input.fasta} -o {output.bcf} {input.bam}"
+#
+#rule delly_collect_sample_sv_calls:
+#    input:
+#        bcfs_del=expand("{project_samples}/{sample}/cnvs/delly/{sample}.delly.{delly_type}.call.bcf",
+#                        zip,
+#                        project_samples=[project_samples, ]*len(samples_names),
+#                        delly_type=["DEL"]*len(samples_names),
+#                        sample=sorted(samples_names)
+#                       ),
+#        bcfs_ins=expand("{project_samples}/{sample}/cnvs/delly/{sample}.delly.{delly_type}.call.bcf",
+#                        zip,
+#                        project_samples=[project_samples, ]*len(samples_names),
+#                        delly_type=["INS"]*len(samples_names),
+#                        sample=sorted(samples_names)
+#                       ),
+#
+#rule delly_merge_sv_sample_calls:
+#    input:
+#        bcfs=expand("{project_samples}/{sample}/cnvs/delly/{sample}.delly.{delly_type}.call.bcf",
+#                        zip,
+#                        project_samples=[project_samples, ]*len(samples_names),
+#                        delly_type=["INS"]*len(samples_names),
+#                        sample=sorted(samples_names)
+#                       ),
+#        bcfs=rules.delly_collect_sample_sv_calls.input.bcfs
+#    output:
+#        bcf="{}/delly/delly.{delly_type}.sites.bcf".format(results_cnv_dir)
+#    params:
+#        bcfs=" ".join(rules.delly_collect_sample_sv_calls.input.bcfs)
+#    threads: threads_max
+#    resources:
+#        mem_mb=memory_max
+#    shell:
+#        "delly merge -o {output.bcf} {params.bcfs}"
+#
 rule delly_genotype_samples:
     input:
-        bcfs=rules.delly_call_sample_sv.output.bcf,
-        merged=rules.delly_merge_sv_sample_calls.output.bcf,
+        #bcfs=rules.delly_call_sample_sv.output.bcf,
+        #merged=rules.delly_merge_sv_sample_calls.output.bcf,
         bam="{project_samples}/{sample}/{sample}.bam",
         bai="{project_samples}/{sample}/{sample}.bam.bai",
         fasta=project_genome + ".fa"
     output:
-        bcf="{project_samples}/{sample}/cnvs/delly/{sample}.delly.genotyped.bcf"
+        bcf="{project_samples}/{sample}/cnvs/delly/{sample}.delly.{delly_type}.genotyped.bcf"
     threads: 1
     resources:
         mem_mb=8192
     shell:
-        "delly call -g {input.fasta} -v {input.merged} -o {output.bcf} {input.bam}"
+        "delly call -f {wildcards.delly_type} -g {input.fasta} -v {input.merged} -o {output.bcf} {input.bam}"
 
 rule delly_collect_sample_sv_genotypes:
     input:
-        bcfs=expand("{project_samples}/{sample}/cnvs/delly/{sample}.delly.genotyped.bcf",
-                     zip,
-                     project_samples=[project_samples, ]*len(samples_names),
-                     sample=sorted(samples_names)
-                    )
+        bcfs=expand("{project_samples}/{sample}/cnvs/delly/{sample}.delly.{delly_type}.genotyped.bcf",
+                    zip,
+                    project_samples=[project_samples, ]*len(samples_names),
+                    sample=sorted(samples_names)
+                    ),
+#        bcfs_ins=expand("{project_samples}/{sample}/cnvs/delly/{sample}.delly.ins.genotyped.bcf",
+#                        zip,
+#                        project_samples=[project_samples, ]*len(samples_names),
+#                        sample=sorted(samples_names)
+#                       ),
 
 rule delly_merge_sv_samples_genotype:
     input:
         bcfs=rules.delly_collect_sample_sv_genotypes.input.bcfs
     output:
-        bcf="{}/delly/delly.genotypes.bcf".format(results_cnv_dir)
-    params:
-        bcfs=" ".join(rules.delly_collect_sample_sv_genotypes.input.bcfs)
+        bcf="{results_cnv_dir}/delly/delly.{delly_type}.genotypes.bcf"
+#    params:
+#        bcfs=" ".join(rules.delly_collect_sample_sv_genotypes.input.bcfs)
     threads: threads_max
     resources:
         mem_mb=memory_max
     shell:
-        "bcftools merge -m id -O b -o {output.bcf} {input.bcfs}"
+        "touch {output}"
+#        "bcftools merge -m id -O b -o {output.bcf} {input.bcfs}"
 
 rule delly_filter_svs:
     input:
         bcf=rules.delly_merge_sv_samples_genotype.output.bcf
     output:
-        bcf="{results_cnv_dir}/delly/delly.filtered.bcf"
+        bcf="{results_cnv_dir}/delly/delly.{delly_type}.filtered.bcf"
     threads: threads_max
     resources:
         mem_mb=memory_max
     shell:
         "delly filter -f germline -o {output.bcf} {input.bcf}"
 
+delly_types = ["DEL", "INS"]
 
 rule call_delly:
     input:
-        expand("{results_cnv_dir}/delly/delly.filtered.bcf",
-               results_cnv_dir=results_cnv_dir)
+#        delly_del=expand("{results_cnv_dir}/delly/delly.del.filtered.bcf",
+#                         results_cnv_dir=results_cnv_dir),
+#        delly_ins=expand("{results_cnv_dir}/delly/delly.ins.filtered.bcf",
+#                         results_cnv_dir=results_cnv_dir),
+        delly_ins=expand("{results_cnv_dir}/delly/delly.{delly_type}.filtered.bcf",
+                         results_cnv_dir=[results_cnv_dir] * len(delly_types),
+                         delly_type=delly_types),
 
 rule detect_copy_number_variants:
     input:
