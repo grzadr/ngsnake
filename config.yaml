@@ -67,3 +67,5 @@ cnvnator_bin_size: 1000
 
 #delly_sv_types: ["DEL", "INS", "DUP", "INV"]
 delly_sv_types: ["DEL", "INS", "DUP", "INV", "BND"]
+
+cnmops_script: "/ngsnake/cnmops.R"

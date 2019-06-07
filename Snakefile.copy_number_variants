@@ -274,8 +274,10 @@ rule run_cnmops:
         mem_mb=memory_max
     output:
         "{results_cnv_dir}/cn.mops/mops.result"
-    shell:
-        "touch {output}"
+    script:
+        config["cnmops_script"]
+#    shell:
+#        "touch {output}"
 
 
 rule call_cnmops:
