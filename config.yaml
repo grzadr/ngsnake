@@ -2,14 +2,22 @@
 threads_max: 20
 # Max memory to run job
 memory_max: 188416
+# Min memory to run job. Should be equatl to at least memory_max/threads_max
+memory_min: 8192
 # tmp directory
 tmp_dir: "/tmp"
 
+# Main directory of the project where other directories are located
 project_dir: "/data"
+# Directory with specific sample data
 samples_dir: "samples"
+# Directory with reads
 reads_dir: "reads"
+# Directory with genomic data
 genome_dir: "genome"
+# Directory with chromosomes sequences
 genome_chrom_dir: "Chromosomes"
+# Genome prefix
 genome_prefix: "CanFam3.1.Ensembl.94"
 variants_dir: "variants"
 result_cnv_dir: "results_cnvs"
@@ -57,4 +65,5 @@ snpeff_database: "/SnpEff"
 
 cnvnator_bin_size: 1000
 
-delly_sv_types: ["DEL", "INS", "DUP", "INV", "BND"]
+delly_sv_types: ["DEL", "INS", "DUP", "INV"]
+#delly_sv_types: ["DEL", "INS", "DUP", "INV", "BND"]

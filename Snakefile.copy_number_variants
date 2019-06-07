@@ -13,6 +13,10 @@ project_logs = "/".join((project_main, "logs"))
 
 threads_max = config["threads_max"]
 memory_max = config["memory_max"]
+memory_min = config["memory_min"]
+
+delly_types=config["delly_sv_types"]
+
 
 def read_samples_names():
     (dirs, ) = glob_wildcards(project_samples + "/{dir, [\d\w]+}")
@@ -25,6 +29,7 @@ samples_names = ["CFA_242", "CFA_246"]
 print("{} samples loaded".format(len(samples_names)))
 print(*samples_names, sep=", ")
 
+
 rule cnvnator_create_root_files:
     input:
         bam="{project_samples}/{sample}/{sample}.bam",
@@ -34,11 +39,12 @@ rule cnvnator_create_root_files:
     log:
         stderr="{project_samples}/{sample}/cnvs/cnvnator/logs/{sample}.CNVnator.{bin_size}.CreateRoot.err",
         stdout="{project_samples}/{sample}/cnvs/cnvnator/logs/{sample}.CNVnator.{bin_size}.CreateRoor.log"
-    threads: 1
+    threads: 2
     resources:
-        mem_mb=12288
+        mem_mb=memory_min * 2
     shell:
         "(cnvnator -root {output.root} -tree {input.bam} -lite > {log.stdout}) 2> {log.stderr}"
+
 
 rule cnvnator_generate_histogram:
     input:
@@ -50,13 +56,13 @@ rule cnvnator_generate_histogram:
         stdout="{project_samples}/{sample}/cnvs/cnvnator/logs/{sample}.CNVnator.{bin_size}.GenerateHistogram.log"
     threads: 1
     resources:
-        mem_mb=4096
+        mem_mb=memory_min
     params:
-#        bin_size=config["cnvnator_bin_size"],
         chroms=project_genome_chroms
     shell:
         "cp {input.root} {output.root} && \
         (cnvnator -root {output.root} -his {wildcards.bin_size} -d {params.chroms} > {log.stdout}) 2> {log.stderr}"
+
 
 rule cnvnator_calculate_statistics:
     input:
@@ -68,13 +74,14 @@ rule cnvnator_calculate_statistics:
         stdout="{project_samples}/{sample}/cnvs/cnvnator/logs/{sample}.CNVnator.{bin_size}.CalculateStatistics.log"
     threads: 1
     resources:
-        mem_mb=4096
+        mem_mb=memory_min
     params:
         bin_size=config["cnvnator_bin_size"],
         chroms=project_genome_chroms
     shell:
         "cp {input.root} {output.root} && \
         (cnvnator -root {output.root} -stat {wildcards.bin_size} -d {params.chroms} > {log.stdout}) 2> {log.stderr}"
+
 
 rule cnvnator_signal_partitioning:
     input:
@@ -86,13 +93,14 @@ rule cnvnator_signal_partitioning:
         stdout="{project_samples}/{sample}/cnvs/cnvnator/logs/{sample}.CNVnator.{bin_size}.SignalPartitioning.log"
     threads: 1
     resources:
-        mem_mb=4096
+        mem_mb=memory_min
     params:
 #        bin_size=config["cnvnator_bin_size"],
         chroms=project_genome_chroms
     shell:
         "cp {input.root} {output.root} && \
         (cnvnator -root {output.root} -partition {wildcards.bin_size} -d {params.chroms} > {log.stdout}) 2> {log.stderr}"
+
 
 rule cnvnator_call_cnvs:
     input:
@@ -103,12 +111,13 @@ rule cnvnator_call_cnvs:
         stderr="{project_samples}/{sample}/cnvs/cnvnator/logs/{sample}.CNVnator.{bin_size}.CallCNVs.err",
     threads: 1
     resources:
-        mem_mb=4096
+        mem_mb=memory_min
     params:
 #        bin_size=config["cnvnator_bin_size"],
         chroms=project_genome_chroms
     shell:
         "(cnvnator -root {input.root} -call {wildcards.bin_size} -d {params.chroms} > {output.tsv}) 2> {log.stderr}"
+
 
 rule delly_call_sample_sv:
     input:
@@ -122,9 +131,10 @@ rule delly_call_sample_sv:
         stdout="{project_samples}/{sample}/cnvs/cnvnator/logs/{sample}.DELLY.CallSample.{delly_type}.log"
     threads: 1
     resources:
-        mem_mb=8192
+        mem_mb=memory_min
     shell:
         "(delly call -t {wildcards.delly_type} -g {input.fasta} -o {output.bcf} {input.bam} > {log.stdout}) 2> {log.stderr}"
+
 
 rule delly_collect_sample_sv_calls:
     input:
@@ -134,6 +144,7 @@ rule delly_collect_sample_sv_calls:
                         sample=sorted(samples_names)
                        ),
 
+
 rule delly_merge_sv_samples_call:
     input:
         bcfs=rules.delly_collect_sample_sv_calls.input.bcfs
@@ -142,9 +153,9 @@ rule delly_merge_sv_samples_call:
     log:
         stderr="{results_cnv_dir}/delly/logs/DELLY.MergeSamplesCall.{delly_type}.err",
         stdout="{results_cnv_dir}/delly/logs/DELLY.MergeSamplesCall.{delly_type}.log",
-    threads: threads_max
+    threads: 4
     resources:
-        mem_mb=memory_max
+        mem_mb=memory_min * 4
     shell:
         "(delly merge -o {output.bcf} {input.bcfs} > {log.stdout}) 2> {log.stderr}"
 
@@ -164,9 +175,9 @@ rule delly_genotype_samples:
         stdout="{project_samples}/{sample}/cnvs/cnvnator/logs/{sample}.DELLY.GenotypeSample.{delly_type}.log"
     threads: 1
     resources:
-        mem_mb=8192
+        mem_mb=memory_min
     shell:
-        "(delly call -f {wildcards.delly_type} -g {input.fasta} -v {input.merged} -o {output.bcf} {input.bam} > {log.stdout}) 2> {log.stderr}"
+        "(delly call -t {wildcards.delly_type} -g {input.fasta} -v {input.merged} -o {output.bcf} {input.bam} > {log.stdout}) 2> {log.stderr}"
 
 
 rule delly_collect_sample_sv_genotypes:
@@ -186,9 +197,9 @@ rule delly_merge_sv_samples_genotype:
     log:
         stderr="{results_cnv_dir}/delly/logs/DELLY.MergeSamplesGenotype.{delly_type}.err",
         stdout="{results_cnv_dir}/delly/logs/DELLY.MergeSamplesgenotype.{delly_type}.log",
-    threads: threads_max
+    threads: 4
     resources:
-        mem_mb=memory_max
+        mem_mb=memory_min * 4
     shell:
         "(bcftools merge -m id -O b -o {output.bcf} {input.bcfs} > {log.stdout}) 2> {log.stderr}"
 
@@ -201,25 +212,31 @@ rule delly_filter_svs:
     log:
         stderr="{results_cnv_dir}/delly/logs/DELLY.FilterSVs.{delly_type}.err",
         stdout="{results_cnv_dir}/delly/logs/DELLY.FilterSVs.{delly_type}.log",
-    threads: threads_max
+    threads: 4
     resources:
-        mem_mb=memory_max
+        mem_mb=memory_min * 4
     shell:
         "(delly filter -f germline -o {output.bcf} {input.bcf} > {log.stdout}) 2> {log.stderr}"
 
-delly_types=config["delly_sv_types"]
+
 rule call_delly:
     input:
-        delly=expand("{results_cnv_dir}/delly/delly.{delly_type}.filtered.bcf",
-                         results_cnv_dir=[results_cnv_dir] * len(delly_types),
-                         delly_type=delly_types),
+        expand("{results_cnv_dir}/delly/delly.{delly_type}.filtered.bcf",
+               results_cnv_dir=[results_cnv_dir] * len(delly_types),
+               delly_type=delly_types),
 
 
-rule detect_copy_number_variants:
+rule call_cnvnator:
     input:
-        cnvnator=expand("{project_samples}/{sample}/cnvs/cnvnator/{sample}.cnvnator.{bin_size}.tsv",
-                        zip,
-                        project_samples=[project_samples, ]*len(samples_names),
-                        bin_size=[config["cnvnator_bin_size"], ] * len(samples_names),
-                        sample=sorted(samples_names))
+        expand("{project_samples}/{sample}/cnvs/cnvnator/{sample}.cnvnator.{bin_size}.tsv",
+               zip,
+               project_samples=[project_samples, ]*len(samples_names),
+               bin_size=[config["cnvnator_bin_size"], ] * len(samples_names),
+               sample=sorted(samples_names))
+
+
+rule call_cnvs:
+    input:
+        cnvnator=rules.call_cnvnator.input,
+        delly=rules.call_delly.input,
 
