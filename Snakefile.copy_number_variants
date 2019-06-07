@@ -119,6 +119,15 @@ rule cnvnator_call_cnvs:
         "(cnvnator -root {input.root} -call {wildcards.bin_size} -d {params.chroms} > {output.tsv}) 2> {log.stderr}"
 
 
+rule call_cnvnator:
+    input:
+        expand("{project_samples}/{sample}/cnvs/cnvnator/{sample}.cnvnator.{bin_size}.tsv",
+               zip,
+               project_samples=[project_samples, ]*len(samples_names),
+               bin_size=[config["cnvnator_bin_size"], ] * len(samples_names),
+               sample=sorted(samples_names))
+
+
 rule delly_call_sample_sv:
     input:
         bam="{project_samples}/{sample}/{sample}.bam",
@@ -204,9 +213,25 @@ rule delly_merge_sv_samples_genotype:
         "(bcftools merge -m id -O b -o {output.bcf} {input.bcfs} > {log.stdout}) 2> {log.stderr}"
 
 
+rule delly_index_sv_samples_genotype:
+    input:
+        bcf=rules.delly_merge_sv_samples_genotype.output.bcf,
+    output:
+        csi="{results_cnv_dir}/delly/delly.{delly_type}.genotypes.bcf.csi"
+    log:
+        stderr="{results_cnv_dir}/delly/logs/DELLY.IndexSamplesGenotype.{delly_type}.err",
+        stdout="{results_cnv_dir}/delly/logs/DELLY.IndexSamplesgenotype.{delly_type}.log",
+    threads: 4
+    resources:
+        mem_mb=memory_min * 4
+    shell:
+        "(bcftools index -o {output.csi} {input.bcf} > {log.stdout}) 2> {log.stderr}"
+
+
 rule delly_filter_svs:
     input:
-        bcf=rules.delly_merge_sv_samples_genotype.output.bcf
+        bcf=rules.delly_merge_sv_samples_genotype.output.bcf,
+        csi=rules.delly_index_sv_samples_genotype.output.csi
     output:
         bcf="{results_cnv_dir}/delly/delly.{delly_type}.filtered.bcf"
     log:
@@ -226,17 +251,35 @@ rule call_delly:
                delly_type=delly_types),
 
 
-rule call_cnvnator:
-    input:
-        expand("{project_samples}/{sample}/cnvs/cnvnator/{sample}.cnvnator.{bin_size}.tsv",
-               zip,
-               project_samples=[project_samples, ]*len(samples_names),
-               bin_size=[config["cnvnator_bin_size"], ] * len(samples_names),
-               sample=sorted(samples_names))
-
-
 rule call_cnvs:
     input:
         cnvnator=rules.call_cnvnator.input,
         delly=rules.call_delly.input,
 
+
+rule run_cnmops:
+    input:
+        bam=expand("{project_samples}/{sample}/{sample}.bam",
+                   zip,
+                   project_samples=[project_samples, ]*len(samples_names),
+                   sample=sorted(samples_names)
+                  ),
+        bai=expand("{project_samples}/{sample}/{sample}.bam.bai",
+                   zip,
+                   project_samples=[project_samples, ]*len(samples_names),
+                   sample=sorted(samples_names)
+                  ),
+    threads: threads_max
+    resources:
+        mem_mb=memory_max
+    output:
+        "{results_cnv_dir}/cn.mops/mops.result"
+    shell:
+        "touch {output}"
+
+
+rule call_cnmops:
+    input:
+        expand("{results_cnv_dir}/cn.mops/mops.result",
+               results_cnv_dir=[results_cnv_dir],
+               ),

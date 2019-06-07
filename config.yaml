@@ -65,5 +65,5 @@ snpeff_database: "/SnpEff"
 
 cnvnator_bin_size: 1000
 
-delly_sv_types: ["DEL", "INS", "DUP", "INV"]
-#delly_sv_types: ["DEL", "INS", "DUP", "INV", "BND"]
+#delly_sv_types: ["DEL", "INS", "DUP", "INV"]
+delly_sv_types: ["DEL", "INS", "DUP", "INV", "BND"]
