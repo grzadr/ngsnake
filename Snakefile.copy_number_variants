@@ -289,9 +289,9 @@ rule cnmops_wgs:
         ploidy=[heterosomes_ploidy.get(name, 2) for name in samples_names],
         classes=["CN{}".format(ele) for ele in cnmops_intervals],
         foldChange=[ele/2.0 if ele != 0.0 else 0.025 for ele in cnmops_intervals],
-        segAlgorithm=config[cnmops]["segAlgorithm"],
-        WL=config["cnmops"]["WL"]
-        returnPosterior=config["cnmops"]["returnPosterior"]
+        segAlgorithm=config["cnmops"]["segAlgorithm"],
+        WL=config["cnmops"]["WL"],
+        returnPosterior=config["cnmops"]["returnPosterior"],
     threads: threads_max
     resources:
         mem_mb=memory_max
@@ -301,7 +301,7 @@ rule cnmops_wgs:
         cnvs_heterosomes="{results_cnv_dir}/cn.mops/cnmops.heterosomes.cnvs",
         cnvr_heterosomes="{results_cnv_dir}/cn.mops/cnmops.heterosomes.cnvr",
     script:
-        config["cnmops"]["script"]
+        config["cnmops"]["script_standard"]
 
 
 rule call_cnmops:

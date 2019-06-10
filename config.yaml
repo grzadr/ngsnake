@@ -70,11 +70,12 @@ cnvnator:
   bin_size: 500
 
 delly:
-  #sv_types: ["DEL", "INS", "DUP", "INV", "BND"]
-  sv_types: ["DEL", "INS", "DUP", "INV"]
+  sv_types: ["DEL", "INS", "DUP", "INV", "BND"]
+  #sv_types: ["DEL", "INS", "DUP", "INV"]
 
 cnmops:
-  script: "/ngsnake/cnmops.R"
+  script_standard: "/ngsnake/cnmops.R"
+  script_cvsc: "/ngsnake/cnmops_cvsc.R"
   segAlgorithm: "DNAcopy"
   WL: 500
   returnPosterior: true
