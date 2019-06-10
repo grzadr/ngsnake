@@ -38,6 +38,7 @@ print(*samples_names, sep=", ")
 
 threads_max = config["threads_max"]
 memory_max = config["memory_max"]
+memory_min = config["memory_min"]
 
 rule fastqc:
     input:
@@ -613,7 +614,7 @@ def generate_intervals():
     return intervals
 
 gatk_intervals_autosomes = generate_intervals()
-gatk_intervals_heterosomes = config["gatk_heterosomes"]
+gatk_intervals_heterosomes = config["gatk"]["heterosomes"]
 gatk_intervals = gatk_intervals_autosomes + gatk_intervals_heterosomes
 
 from os import path
@@ -630,8 +631,8 @@ def generate_ploidy_heterosomes(ploidy_file, sep="\t"):
     else:
       return {}
 
-gatk_autosomes_ploidy=config["gatk_autosomes_ploidy"]
-gatk_heterosomes_ploidy=generate_ploidy_heterosomes(config["gatk_heterosomes_ploidy"])
+gatk_autosomes_ploidy=config["gatk"]["autosomes_ploidy"]
+gatk_heterosomes_ploidy=generate_ploidy_heterosomes(config["heterosomes_ploidy"])
 
 rule gatk_haplotype_caller_heterosomes:
     priority: 950
@@ -648,13 +649,13 @@ rule gatk_haplotype_caller_heterosomes:
     log:
         "{project_samples}/{sample}/logs/{sample}.HaplotypeCaller.Heterosomes.log"
     params:
-        annotation=" ".join(["--annotation " + ele for ele in config["gatk_annotations"]]),
-        max_reads=config["gatk_max_reads"],
-        report_num_alleles=config["gatk_report_num_alleles"],
-        max_num_alleles=config["gatk_max_num_alleles"],
-        all_site_pls=config["gatk_all_site_pls"],
-        max_assembly_size=config["gatk_max_assembly_size"],
-        assembly_padding=config["gatk_assembly_padding"],
+        annotation=" ".join(["--annotation " + ele for ele in config["gatk"]["annotations"]]),
+        max_reads=config["gatk"]["max_reads"],
+        report_num_alleles=config["gatk"]["report_num_alleles"],
+        max_num_alleles=config["gatk"]["max_num_alleles"],
+        all_site_pls=config["gatk"]["all_site_pls"],
+        max_assembly_size=config["gatk"]["max_assembly_size"],
+        assembly_padding=config["gatk"]["assembly_padding"],
         tmp_dir = config["tmp_dir"],
         intervals=["-L {}".format(ele) for ele in gatk_intervals_heterosomes],
         ploidy=lambda wildcards: gatk_heterosomes_ploidy.get(wildcards.sample, gatk_autosomes_ploidy)
@@ -695,13 +696,13 @@ rule gatk_haplotype_caller_autosomes:
     log:
         "{project_samples}/{sample}/logs/{sample}.HaplotypeCaller.autosomes.log"
     params:
-        annotation=" ".join(["--annotation " + ele for ele in config["gatk_annotations"]]),
-        max_reads=config["gatk_max_reads"],
-        report_num_alleles=config["gatk_report_num_alleles"],
-        max_num_alleles=config["gatk_max_num_alleles"],
-        all_site_pls=config["gatk_all_site_pls"],
-        max_assembly_size=config["gatk_max_assembly_size"],
-        assembly_padding=config["gatk_assembly_padding"],
+        annotation=" ".join(["--annotation " + ele for ele in config["gatk"]["annotations"]]),
+        max_reads=config["gatk"]["max_reads"],
+        report_num_alleles=config["gatk"]["report_num_alleles"],
+        max_num_alleles=config["gatk"]["max_num_alleles"],
+        all_site_pls=config["gatk"]["all_site_pls"],
+        max_assembly_size=config["gatk"]["max_assembly_size"],
+        assembly_padding=config["gatk"]["assembly_padding"],
         tmp_dir = config["tmp_dir"],
         intervals=["-L {}".format(ele) for ele in gatk_intervals_autosomes],
         ploidy=gatk_autosomes_ploidy
@@ -760,7 +761,7 @@ rule gatk_combine_gvcfs:
         tmp_dir=config["tmp_dir"],
         vcfs=" ".join(["-V {}".format(ele) for ele in (rules.collect_gvcfs.input.autosomes +
                                                        rules.collect_gvcfs.input.heterosomes)]),
-        annotation=" ".join(["--annotation " + ele for ele in config["gatk_annotations"]])
+        annotation=" ".join(["--annotation " + ele for ele in config["gatk"]["annotations"]])
     threads: threads_max
     resources:
         mem_mb=memory_max
@@ -789,9 +790,9 @@ rule gatk_genotype_gvcfs:
         vcf_idx=temp("{variants_dir}/var.raw.vcf.idx")
     log: "{variants_dir}/logs/GATKGenotypeGVCFs.log"
     params:
-        annotation=" ".join(["--annotation " + ele for ele in config["gatk_annotations"]]),
-        report_num_alleles=config["gatk_report_num_alleles"],
-        max_num_alleles=config["gatk_max_num_alleles"],
+        annotation=" ".join(["--annotation " + ele for ele in config["gatk"]["annotations"]]),
+        report_num_alleles=config["gatk"]["report_num_alleles"],
+        max_num_alleles=config["gatk"]["max_num_alleles"],
         tmp_dir = config["tmp_dir"]
     threads: threads_max
     resources:
