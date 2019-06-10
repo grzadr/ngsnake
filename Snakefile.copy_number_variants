@@ -18,13 +18,13 @@ memory_min = config["memory_min"]
 delly_types=config["delly"]["sv_types"]
 
 
-def read_samples_names():
-    (dirs, ) = glob_wildcards(project_samples + "/{dir, [\d\w]+}")
+def read_samples_names(directory):
+    (dirs, ) = glob_wildcards(directory + "/{dir, [\d\w]+}")
     dirs = [ele for ele in dirs if "/" not in ele]
     return sorted(dirs)
 
-#samples_names = read_samples_names()
-samples_names = ["CFA_222", "CFA_246", "CFA_606"]
+samples_names = read_samples_names(project_samples)
+#samples_names = ["CFA_222", "CFA_246", "CFA_606"]
 
 print("{} samples loaded".format(len(samples_names)))
 print(*samples_names, sep=", ")
