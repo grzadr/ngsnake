@@ -15,7 +15,7 @@ threads_max = config["threads_max"]
 memory_max = config["memory_max"]
 memory_min = config["memory_min"]
 
-delly_types=config["delly_sv_types"]
+delly_types=config["delly"]["sv_types"]
 
 
 def read_samples_names():
@@ -24,10 +24,27 @@ def read_samples_names():
     return sorted(dirs)
 
 #samples_names = read_samples_names()
-samples_names = ["CFA_242", "CFA_246"]
+samples_names = ["CFA_242", "CFA_246", "CFA_606"]
 
 print("{} samples loaded".format(len(samples_names)))
 print(*samples_names, sep=", ")
+
+
+def read_heterosomes_ploidy(file_name):
+    result = {}
+    with open(file_name, "r") as input_file:
+        for line in input_file:
+            sample, ploidy = line.rstrip().split()
+            result[sample] = int(ploidy)
+    return result
+
+
+heterosomes_ploidy = read_heterosomes_ploidy(config["heterosomes_ploidy"])
+
+
+print("{} samples loaded with different ploidy".format(len(heterosomes_ploidy)))
+print(*["{}={}".format(name, heterosomes_ploidy.get(name, 2))
+        for name in samples_names], sep = ", ")
 
 
 rule cnvnator_create_root_files:
@@ -76,7 +93,6 @@ rule cnvnator_calculate_statistics:
     resources:
         mem_mb=memory_min
     params:
-        bin_size=config["cnvnator_bin_size"],
         chroms=project_genome_chroms
     shell:
         "cp {input.root} {output.root} && \
@@ -124,7 +140,7 @@ rule call_cnvnator:
         expand("{project_samples}/{sample}/cnvs/cnvnator/{sample}.cnvnator.{bin_size}.tsv",
                zip,
                project_samples=[project_samples, ]*len(samples_names),
-               bin_size=[config["cnvnator_bin_size"], ] * len(samples_names),
+               bin_size=[config["cnvnator"]["bin_size"], ] * len(samples_names),
                sample=sorted(samples_names))
 
 
@@ -251,37 +267,54 @@ rule call_delly:
                delly_type=delly_types),
 
 
-rule call_cnvs:
-    input:
-        cnvnator=rules.call_cnvnator.input,
-        delly=rules.call_delly.input,
+cnmops_intervals = list(range(0,17)) + [32, 64, 128]
 
 
-rule run_cnmops:
+rule cnmops_wgs:
     input:
         bam=expand("{project_samples}/{sample}/{sample}.bam",
                    zip,
                    project_samples=[project_samples, ]*len(samples_names),
-                   sample=sorted(samples_names)
+                   sample=samples_names
                   ),
         bai=expand("{project_samples}/{sample}/{sample}.bam.bai",
                    zip,
                    project_samples=[project_samples, ]*len(samples_names),
-                   sample=sorted(samples_names)
+                   sample=samples_names
                   ),
+    params:
+        sampleNames=samples_names,
+        autosomes=[str(ele) for ele in range(1, 39)],
+        heterosomes=["X"],
+        ploidy=[heterosomes_ploidy.get(name, 2) for name in samples_names],
+        classes=["CN{}".format(ele) for ele in cnmops_intervals],
+        foldChange=[ele/2.0 if ele != 0.0 else 0.025 for ele in cnmops_intervals],
+        segAlgorithm=config[cnmops]["segAlgorithm"],
+        WL=config["cnmops"]["WL"]
+        returnPosterior=config["cnmops"]["returnPosterior"]
     threads: threads_max
     resources:
         mem_mb=memory_max
     output:
-        "{results_cnv_dir}/cn.mops/mops.result"
+        cnvs_autosomes="{results_cnv_dir}/cn.mops/cnmops.autosomes.cnvs",
+        cnvr_autosomes="{results_cnv_dir}/cn.mops/cnmops.autosomes.cnvr",
+        cnvs_heterosomes="{results_cnv_dir}/cn.mops/cnmops.heterosomes.cnvs",
+        cnvr_heterosomes="{results_cnv_dir}/cn.mops/cnmops.heterosomes.cnvr",
     script:
-        config["cnmops_script"]
-#    shell:
-#        "touch {output}"
+        config["cnmops"]["script"]
 
 
 rule call_cnmops:
     input:
-        expand("{results_cnv_dir}/cn.mops/mops.result",
-               results_cnv_dir=[results_cnv_dir],
-               ),
+        wgs=expand("{results_cnv_dir}/cn.mops/cnmops.{chromosomes}.{result}",
+                   results_cnv_dir=[results_cnv_dir],
+                   chromosomes=["autosomes", "heterosomes"],
+                   result=["cnvs", "cnvr"]
+                   ),
+
+
+rule call_cnvs:
+    input:
+        cnvnator=rules.call_cnvnator.input,
+        delly=rules.call_delly.input,
+        cnmops_wgs=rules.call_cnmops.input.wgs

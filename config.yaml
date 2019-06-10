@@ -25,47 +25,56 @@ result_cnv_dir: "results_cnvs"
 bait_intervals: "bait_intervals"
 target_intervals: "target_intervals"
 
-gatk_autosomes_ploidy: 2
-gatk_heterosomes: ["X", ]
-gatk_heterosomes_ploidy: "/data/heterosomes_ploidy.tsv"
-gatk_max_reads: 100
-gatk_report_num_alleles: "true"
-gatk_max_num_alleles: 16
-gatk_all_site_pls: "true"
-gatk_max_assembly_size: 500
-gatk_assembly_padding: 150
-gatk_annotation_groups: ["AS_StandardAnnotation", "ReducibleAnnotation"]
-gatk_annotations: [
-  "BaseQualityRankSumTest",
-  "AS_BaseQualityRankSumTest",
-  "FisherStrand",
-  "AS_FisherStrand",
-  "MappingQualityRankSumTest",
-  "AS_MappingQualityRankSumTest",
-  "RMSMappingQuality",
-  "AS_RMSMappingQuality",
-  "QualByDepth",
-  "AS_QualByDepth",
-  "StrandOddsRatio",
-  "AS_StrandOddsRatio",
-  "ReadPosRankSumTest",
-  "AS_ReadPosRankSumTest",
-  "ChromosomeCounts",
-  "ClippingRankSumTest",
-  "Coverage",
-  "DepthPerAlleleBySample",
-  "DepthPerSampleHC",
-  "LikelihoodRankSumTest",
-  "MappingQualityZero",
-  "SampleList",
-  "TandemRepeat",
-]
+heterosomes_ploidy: "/data/heterosomes_ploidy.tsv"
 
-snpeff_database: "/SnpEff"
+gatk:
+  autosomes_ploidy: 2
+  heterosomes: ["X", ]
+  max_reads: 100
+  report_num_alleles: "true"
+  max_num_alleles: 16
+  all_site_pls: "true"
+  max_assembly_size: 500
+  assembly_padding: 150
+  annotation_groups: ["AS_StandardAnnotation", "ReducibleAnnotation"]
+  annotations: [
+    "BaseQualityRankSumTest",
+    "AS_BaseQualityRankSumTest",
+    "FisherStrand",
+    "AS_FisherStrand",
+    "MappingQualityRankSumTest",
+    "AS_MappingQualityRankSumTest",
+    "RMSMappingQuality",
+    "AS_RMSMappingQuality",
+    "QualByDepth",
+    "AS_QualByDepth",
+    "StrandOddsRatio",
+    "AS_StrandOddsRatio",
+    "ReadPosRankSumTest",
+    "AS_ReadPosRankSumTest",
+    "ChromosomeCounts",
+    "ClippingRankSumTest",
+    "Coverage",
+    "DepthPerAlleleBySample",
+    "DepthPerSampleHC",
+    "LikelihoodRankSumTest",
+    "MappingQualityZero",
+    "SampleList",
+    "TandemRepeat",
+  ]
 
-cnvnator_bin_size: 1000
+snpeff:
+  database: "/SnpEff"
 
-#delly_sv_types: ["DEL", "INS", "DUP", "INV"]
-delly_sv_types: ["DEL", "INS", "DUP", "INV", "BND"]
+cnvnator:
+  bin_size: 500
 
-cnmops_script: "/ngsnake/cnmops.R"
+delly:
+  #sv_types: ["DEL", "INS", "DUP", "INV", "BND"]
+  sv_types: ["DEL", "INS", "DUP", "INV"]
+
+cnmops:
+  script: "/ngsnake/cnmops.R"
+  segAlgorithm: "DNAcopy"
+  WL: 500
+  returnPosterior: true
