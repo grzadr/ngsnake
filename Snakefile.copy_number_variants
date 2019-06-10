@@ -24,10 +24,35 @@ def read_samples_names():
     return sorted(dirs)
 
 #samples_names = read_samples_names()
-samples_names = ["CFA_242", "CFA_246", "CFA_606"]
+samples_names = ["CFA_222", "CFA_246", "CFA_606"]
 
 print("{} samples loaded".format(len(samples_names)))
 print(*samples_names, sep=", ")
+
+from csv import reader
+
+def read_csvc_samples_names(file_name, samples_names):
+    control = []
+    case = []
+    with open(file_name, "r") as input_file:
+        input_reader = reader(input_file, delimiter="\t")
+        for name, group in input_reader:
+            if name not in samples_names:
+                continue
+
+            if group == "case":
+                case.append(name)
+            else:
+                control.append(name)
+    return case, control
+
+
+case_samples_names, control_samples_names = read_csvc_samples_names(config["cnmops"]["groups_file"], samples_names)
+
+print("Picked {} samples for case and {} for control:".format(len(case_samples_names),
+                                                              len(control_samples_names)))
+print("Case:", ", ".join(case_samples_names))
+print("Control:", ", ".join(control_samples_names))
 
 
 def read_heterosomes_ploidy(file_name):
@@ -270,7 +295,7 @@ rule call_delly:
 cnmops_intervals = list(range(0,17)) + [32, 64, 128]
 
 
-rule cnmops_wgs:
+rule cnmops_standard:
     input:
         bam=expand("{project_samples}/{sample}/{sample}.bam",
                    zip,
@@ -304,17 +329,67 @@ rule cnmops_wgs:
         config["cnmops"]["script_standard"]
 
 
-rule call_cnmops:
+rule cnmops_cvsc:
     input:
-        wgs=expand("{results_cnv_dir}/cn.mops/cnmops.{chromosomes}.{result}",
-                   results_cnv_dir=[results_cnv_dir],
-                   chromosomes=["autosomes", "heterosomes"],
-                   result=["cnvs", "cnvr"]
-                   ),
+        case_bam=expand("{project_samples}/{sample}/{sample}.bam", zip,
+                        project_samples=[project_samples, ]*len(samples_names),
+                        sample=case_samples_names
+                       ),
+        case_bai=expand("{project_samples}/{sample}/{sample}.bam.bai", zip,
+                        project_samples=[project_samples, ]*len(samples_names),
+                        sample=case_samples_names
+                       ),
+        control_bam=expand("{project_samples}/{sample}/{sample}.bam", zip,
+                           project_samples=[project_samples, ]*len(samples_names),
+                           sample=control_samples_names
+                          ),
+        control_bai=expand("{project_samples}/{sample}/{sample}.bam.bai", zip,
+                           project_samples=[project_samples, ]*len(samples_names),
+                           sample=control_samples_names
+                          ),
+    params:
+        ControlSampleNames=control_samples_names,
+        CaseSampleNames=case_samples_names,
+        autosomes=[str(ele) for ele in range(1, 39)],
+        heterosomes=["X"],
+        ploidy=[heterosomes_ploidy.get(name, 2) for name in samples_names],
+        classes=["CN{}".format(ele) for ele in cnmops_intervals],
+        foldChange=[ele/2.0 if ele != 0.0 else 0.025 for ele in cnmops_intervals],
+        segAlgorithm=config["cnmops"]["segAlgorithm"],
+        WL=config["cnmops"]["WL"],
+        returnPosterior=config["cnmops"]["returnPosterior"],
+    threads: threads_max
+    resources:
+        mem_mb=memory_max
+    output:
+        cnvs_autosomes="{results_cnv_dir}/cn.mops/cnmops.cvsc.autosomes.cnvs",
+        cnvr_autosomes="{results_cnv_dir}/cn.mops/cnmops.cvsc.autosomes.cnvr",
+        cnvs_heterosomes="{results_cnv_dir}/cn.mops/cnmops.cvsc.heterosomes.cnvs",
+        cnvr_heterosomes="{results_cnv_dir}/cn.mops/cnmops.cvsc.heterosomes.cnvr",
+    script:
+        config["cnmops"]["script_standard"]
+
+
+rule call_cnmops_standard:
+    input:
+        expand("{results_cnv_dir}/cn.mops/cnmops.{chromosomes}.{result}",
+               results_cnv_dir=[results_cnv_dir],
+               chromosomes=["autosomes", "heterosomes"],
+               result=["cnvs", "cnvr"]
+              ),
+
+
+rule call_cnmops_cvsc:
+    input:
+        expand("{results_cnv_dir}/cn.mops/cnmops.cvsc.{chromosomes}.{result}",
+               results_cnv_dir=[results_cnv_dir],
+               chromosomes=["autosomes", "heterosomes"],
+               result=["cnvs", "cnvr"]
+              ),
 
 
 rule call_cnvs:
     input:
         cnvnator=rules.call_cnvnator.input,
         delly=rules.call_delly.input,
-        cnmops_wgs=rules.call_cnmops.input.wgs
+        cnmops_standard=rules.call_cnmops_standard.input,
