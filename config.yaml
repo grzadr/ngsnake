@@ -79,4 +79,4 @@ cnmops:
   groups_file: "/data/cnmops_groups.tsv"
   segAlgorithm: "DNAcopy"
   WL: 100
-  returnPosterior: true
+  returnPosterior: false
