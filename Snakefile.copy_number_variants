@@ -1,3 +1,6 @@
+from csv import reader
+
+
 genome_prefix=config["genome_prefix"]
 
 project_main = config["project_dir"]
@@ -29,7 +32,6 @@ samples_names = read_samples_names(project_samples)
 print("{} samples loaded".format(len(samples_names)))
 print(*samples_names, sep=", ")
 
-from csv import reader
 
 def read_csvc_samples_names(file_name, samples_names):
     control = []
@@ -177,8 +179,8 @@ rule delly_call_sample_sv:
     output:
         bcf="{project_samples}/{sample}/cnvs/delly/{sample}.delly.{delly_type}.call.bcf"
     log:
-        stderr="{project_samples}/{sample}/cnvs/cnvnator/logs/{sample}.DELLY.CallSample.{delly_type}.err",
-        stdout="{project_samples}/{sample}/cnvs/cnvnator/logs/{sample}.DELLY.CallSample.{delly_type}.log"
+        stderr="{project_samples}/{sample}/cnvs/delly/logs/{sample}.DELLY.CallSample.{delly_type}.err",
+        stdout="{project_samples}/{sample}/cnvs/delly/logs/{sample}.DELLY.CallSample.{delly_type}.log"
     threads: 1
     resources:
         mem_mb=memory_min
@@ -221,8 +223,8 @@ rule delly_genotype_samples:
     output:
         bcf="{project_samples}/{sample}/cnvs/delly/{sample}.delly.{delly_type}.genotyped.bcf"
     log:
-        stderr="{project_samples}/{sample}/cnvs/cnvnator/logs/{sample}.DELLY.GenotypeSample.{delly_type}.err",
-        stdout="{project_samples}/{sample}/cnvs/cnvnator/logs/{sample}.DELLY.GenotypeSample.{delly_type}.log"
+        stderr="{project_samples}/{sample}/cnvs/delly/logs/{sample}.DELLY.GenotypeSample.{delly_type}.err",
+        stdout="{project_samples}/{sample}/cnvs/delly/logs/{sample}.DELLY.GenotypeSample.{delly_type}.log"
     threads: 1
     resources:
         mem_mb=memory_min
@@ -307,6 +309,9 @@ rule cnmops_standard:
                    project_samples=[project_samples, ]*len(samples_names),
                    sample=samples_names
                   ),
+    log:
+        stderr="{results_cnv_dir}/cn.mops/logs/cn.mops.cvsc.err",
+        stdout="{results_cnv_dir}/cn.mops/logs/cn.mops.cvsc.log",
     params:
         sampleNames=samples_names,
         autosomes=[str(ele) for ele in range(1, 39)],
@@ -331,28 +336,29 @@ rule cnmops_standard:
 
 rule cnmops_cvsc:
     input:
-        case_bam=expand("{project_samples}/{sample}/{sample}.bam", zip,
-                        project_samples=[project_samples, ]*len(samples_names),
+        caseBAM=expand("{project_samples}/{sample}/{sample}.bam", zip,
+                        project_samples=[project_samples, ]*len(case_samples_names),
                         sample=case_samples_names
                        ),
-        case_bai=expand("{project_samples}/{sample}/{sample}.bam.bai", zip,
-                        project_samples=[project_samples, ]*len(samples_names),
+        caseBAI=expand("{project_samples}/{sample}/{sample}.bam.bai", zip,
+                        project_samples=[project_samples, ]*len(case_samples_names),
                         sample=case_samples_names
                        ),
-        control_bam=expand("{project_samples}/{sample}/{sample}.bam", zip,
-                           project_samples=[project_samples, ]*len(samples_names),
+        controlBAM=expand("{project_samples}/{sample}/{sample}.bam", zip,
+                           project_samples=[project_samples, ]*len(control_samples_names),
                            sample=control_samples_names
                           ),
-        control_bai=expand("{project_samples}/{sample}/{sample}.bam.bai", zip,
-                           project_samples=[project_samples, ]*len(samples_names),
+        controlBAI=expand("{project_samples}/{sample}/{sample}.bam.bai", zip,
+                           project_samples=[project_samples, ]*len(control_samples_names),
                            sample=control_samples_names
                           ),
     params:
-        ControlSampleNames=control_samples_names,
-        CaseSampleNames=case_samples_names,
+        controlSampleNames=control_samples_names,
+        caseSampleNames=case_samples_names,
         autosomes=[str(ele) for ele in range(1, 39)],
         heterosomes=["X"],
-        ploidy=[heterosomes_ploidy.get(name, 2) for name in samples_names],
+        casePloidy=[heterosomes_ploidy.get(name, 2) for name in case_samples_names],
+        controlPloidy=[heterosomes_ploidy.get(name, 2) for name in control_samples_names],
         classes=["CN{}".format(ele) for ele in cnmops_intervals],
         foldChange=[ele/2.0 if ele != 0.0 else 0.025 for ele in cnmops_intervals],
         segAlgorithm=config["cnmops"]["segAlgorithm"],
@@ -367,7 +373,7 @@ rule cnmops_cvsc:
         cnvs_heterosomes="{results_cnv_dir}/cn.mops/cnmops.cvsc.heterosomes.cnvs",
         cnvr_heterosomes="{results_cnv_dir}/cn.mops/cnmops.cvsc.heterosomes.cnvr",
     script:
-        config["cnmops"]["script_standard"]
+        config["cnmops"]["script_cvsc"]
 
 
 rule call_cnmops_standard:

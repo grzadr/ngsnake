@@ -6,22 +6,32 @@ writeLines(">>> Script will be launched with following parameters")
 snakemake
 
 writeLines(">>> Analysis of Autosomal CNVs")
-writeLines(">>> Getting Read Counts")
-bamDataRanges <- getReadCountsFromBAM(BAMFiles=snakemake@input$bam,
-                                      sampleNames=snakemake@params$sampleNames,
-                                      refSeqNames=snakemake@params$autosomes,
-                                      WL=snakemake@params$WL,
-                                      parallel=snakemake@threads)
-writeLines(">>> Getting Read Counts [DONE]")
+writeLines(">>> Getting Case Read Counts")
+bamDataRangesCase <- getReadCountsFromBAM(BAMFiles=snakemake@input$caseBAM,
+                                          sampleNames=snakemake@params$caseSampleNames,
+                                          refSeqNames=snakemake@params$autosomes,
+                                          WL=snakemake@params$WL,
+                                          parallel=snakemake@threads)
+warnings()
+writeLines(">>> Getting Case Read Counts [DONE]")
+
+writeLines(">>> Getting Control Read Counts")
+bamDataRangesControl <- getReadCountsFromBAM(BAMFiles=snakemake@input$controlBAM,
+                                             sampleNames=snakemake@params$controlSampleNames,
+                                             refSeqNames=snakemake@params$autosomes,
+                                             WL=snakemake@params$WL,
+                                             parallel=snakemake@threads)
+warnings()
+writeLines(">>> Getting Control Read Counts [DONE]")
 
 writeLines(">>> Calculating Initial CNVs")
-resCNMOPS <- cn.mops(bamDataRanges,
-                     parallel=snakemake@threads,
-                     classes=snakemake@params$classes,
-                     segAlgorithm=snakemake@params$segAlgorithm,
-                     I=snakemake@params$foldChange,
-                     returnPosterior=snakemake@params$returnPosterior,
-                    )
+resCNMOPS <- referencecn.mops(cases=bamDataRangesCase,
+                              controls=bamDataRangesControl,
+                              parallel=snakemake@threads,
+                              classes=snakemake@params$classes,
+                              segAlgorithm=snakemake@params$segAlgorithm,
+                              I=snakemake@params$foldChange,
+                              returnPosterior=snakemake@params$returnPosterior)
 warnings()
 writeLines(">>> Calculating Initial CNVs [DONE]")
 
@@ -35,27 +45,47 @@ write.table(cnvr(resCNMOPS), file=snakemake@output$cnvr_autosomes, sep='\t', quo
 writeLines(">>> Saving Results [DONE]")
 
 writeLines(">>> Analysis of Heterosomal CNVs")
-writeLines(">>> Getting Read Counts")
-bamDataRanges <- getReadCountsFromBAM(BAMFiles=snakemake@input$bam,
-                                      sampleNames=snakemake@params$sampleNames,
-                                      refSeqNames=snakemake@params$heterosomes,
-                                      WL=snakemake@params$WL,
-                                      parallel=snakemake@threads)
-writeLines(">>> Getting Read Counts [DONE]")
+writeLines(">>> Getting Case Read Counts")
 
-writeLines(">>> Normalizing Read Counts")
-bamDataRanges <- normalizeChromosomes(bamDataRanges, ploidy=snakemake@params$ploidy)
-writeLines(">>> Normalizing Read Counts [DONE]")
+bamDataRangesCase <- getReadCountsFromBAM(BAMFiles=snakemake@input$caseBAM,
+                                          sampleNames=snakemake@params$caseSampleNames,
+                                          refSeqNames=snakemake@params$heterosomes,
+                                          WL=snakemake@params$WL,
+                                          parallel=snakemake@threads)
+warnings()
+writeLines(">>> Getting Case Read Counts [DONE]")
+
+writeLines(">>> Getting Control Read Counts")
+bamDataRangesControl <- getReadCountsFromBAM(BAMFiles=snakemake@input$controlBAM,
+                                             sampleNames=snakemake@params$controlSampleNames,
+                                             refSeqNames=snakemake@params$heterosomes,
+                                             WL=snakemake@params$WL,
+                                             parallel=snakemake@threads)
+warnings()
+writeLines(">>> Getting Control Read Counts [DONE]")
+
+writeLines(">>> Normalizing Case Read Counts")
+bamDataRangesCase <- normalizeChromosomes(bamDataRangesCase,
+                                          ploidy=snakemake@params$casePloidy)
+warnings()
+writeLines(">>> Normalizing Case Read Counts [DONE]")
+
+writeLines(">>> Normalizing Control Read Counts")
+bamDataRangesControl <- normalizeChromosomes(bamDataRangesControl,
+                                             ploidy=snakemake@params$controlPloidy)
+warnings()
+writeLines(">>> Normalizing Control Read Counts [DONE]")
 
 writeLines(">>> Calculating Initial CNVs")
-resCNMOPS <- cn.mops(bamDataRanges,
-                     parallel=snakemake@threads,
-                     classes=snakemake@params$classes,
-                     segAlgorithm=snakemake@params$segAlgorithm,
-                     I=snakemake@params$foldChange,
-                     returnPosterior=snakemake@params$returnPosterior,
-                     norm=FALSE
-                    )
+resCNMOPS <- referencecn.mops(cases=bamDataRangesCase,
+                              controls=bamDataRangesControl,
+                              parallel=snakemake@threads,
+                              classes=snakemake@params$classes,
+                              segAlgorithm=snakemake@params$segAlgorithm,
+                              I=snakemake@params$foldChange,
+                              returnPosterior=snakemake@params$returnPosterior,
+                              norm=FALSE
+                             )
 warnings()
 writeLines(">>> Calculating Initial CNVs [DONE]")
 
