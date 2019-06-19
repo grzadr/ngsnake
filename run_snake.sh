@@ -9,6 +9,7 @@ SNAKE_CONFIG=${4}
 SNAKE_ARGS="${@:5}"
 
 DOCKER_IMAGE="grzadr/biosak:${DOCKER_IMAGE_TAG}"
+DOCKER_CONTAINER="ngsnake_$(date '+%Y-%m-%d_%H%M%S')"
 SNAKE_THREADS=20
 SNAKE_MEMORY=188416
 SNAKE_DIR=${PWD}
@@ -21,13 +22,13 @@ docker run -it \
   -v ${SNAKE_DIR}:/ngsnake \
   -v ${SNPEFF_DIR}:/SnpEff \
   -w /data \
-  --name ngsnake_mapping \
+  --name ${DOCKER_CONTAINER} \
   --rm \
   -v /tmp:/tmp:rw \
   ${DOCKER_IMAGE} \
   snakemake \
-  -s "/ngsnake/${SNAKE_FILE}" \
-  --configfile "/ngsnake/${SNAKE_CONFIG}" \
+  -s "${SNAKE_FILE}" \
+  --configfile "${SNAKE_CONFIG}" \
   --resources mem_mb=${SNAKE_MEMORY} \
   -pr -j ${SNAKE_THREADS} \
   ${SNAKE_ARGS}
