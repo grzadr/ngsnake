@@ -27,7 +27,6 @@ def read_samples_names(directory):
     return sorted(dirs)
 
 samples_names = read_samples_names(project_samples)
-#samples_names = ["CFA_222", "CFA_246", "CFA_606"]
 
 print("{} samples loaded".format(len(samples_names)))
 print(*samples_names, sep=", ")
@@ -138,7 +137,6 @@ rule cnvnator_signal_partitioning:
     resources:
         mem_mb=memory_min
     params:
-#        bin_size=config["cnvnator_bin_size"],
         chroms=project_genome_chroms
     shell:
         "cp {input.root} {output.root} && \
@@ -156,17 +154,29 @@ rule cnvnator_call_cnvs:
     resources:
         mem_mb=memory_min
     params:
-#        bin_size=config["cnvnator_bin_size"],
         chroms=project_genome_chroms
     shell:
         "(cnvnator -root {input.root} -call {wildcards.bin_size} -d {params.chroms} > {output.tsv}) 2> {log.stderr}"
 
 
+rule cnvnator_copy_cnvs:
+    input:
+        tsv=expand("{project_samples}/{{sample}}/cnvs/cnvnator/{{sample}}.cnvnator.{{bin_size}}.tsv",
+                   project_samples=[project_samples])
+    output:
+        tsv="{results_cnv_dir}/cnvnator/{sample}.cnvnator.{bin_size}.tsv"
+    threads: 1
+    resources:
+        mem_mb=memory_min
+    shell:
+        "cp {input.tsv} {output.tsv}"
+
+
 rule call_cnvnator:
     input:
-        expand("{project_samples}/{sample}/cnvs/cnvnator/{sample}.cnvnator.{bin_size}.tsv",
+        expand("{results_cnv_dir}/cnvnator/{sample}.cnvnator.{bin_size}.tsv",
                zip,
-               project_samples=[project_samples, ]*len(samples_names),
+               results_cnv_dir=[results_cnv_dir] * len(samples_names),
                bin_size=[config["cnvnator"]["bin_size"], ] * len(samples_names),
                sample=sorted(samples_names))
 
@@ -294,7 +304,9 @@ rule call_delly:
                delly_type=delly_types),
 
 
-cnmops_intervals = list(range(0,17)) + [32, 64, 128]
+cnmops_intervals = config["cnmops"].get("intervals", list(range(0,17)) + [32, 64, 128])
+cnmops_autosomes = config["cnmops"].get("autosomes", [str(ele) for ele in range(1, 39)])
+cnmops_heterosomes = config["cnmops"].get("heterosomes", ["X",])
 
 
 rule cnmops_standard:
@@ -314,24 +326,24 @@ rule cnmops_standard:
         stdout="{results_cnv_dir}/cn.mops/logs/cn.mops.cvsc.log",
     params:
         sampleNames=samples_names,
-        autosomes=[str(ele) for ele in range(1, 39)],
-        heterosomes=["X"],
+        autosomes=cnmops_autosomes,
+        heterosomes=cnmops_heterosomes,
         ploidy=[heterosomes_ploidy.get(name, 2) for name in samples_names],
         classes=["CN{}".format(ele) for ele in cnmops_intervals],
         foldChange=[ele/2.0 if ele != 0.0 else 0.025 for ele in cnmops_intervals],
         segAlgorithm=config["cnmops"]["segAlgorithm"],
-        WL=config["cnmops"]["WL"],
+        WL=config["cnmops"]["WL"]["standard"],
         returnPosterior=config["cnmops"]["returnPosterior"],
     threads: threads_max
     resources:
         mem_mb=memory_max
     output:
-        cnvs_autosomes="{results_cnv_dir}/cn.mops/cnmops.autosomes.cnvs",
-        cnvr_autosomes="{results_cnv_dir}/cn.mops/cnmops.autosomes.cnvr",
-        cnvs_heterosomes="{results_cnv_dir}/cn.mops/cnmops.heterosomes.cnvs",
-        cnvr_heterosomes="{results_cnv_dir}/cn.mops/cnmops.heterosomes.cnvr",
+        cnvs_autosomes="{results_cnv_dir}/cn.mops/cnmops.{WL}.autosomes.cnvs",
+        cnvr_autosomes="{results_cnv_dir}/cn.mops/cnmops.{WL}.autosomes.cnvr",
+        cnvs_heterosomes="{results_cnv_dir}/cn.mops/cnmops.{WL}.heterosomes.cnvs",
+        cnvr_heterosomes="{results_cnv_dir}/cn.mops/cnmops.{WL}.heterosomes.cnvr",
     script:
-        config["cnmops"]["script_standard"]
+        config["cnmops"]["script"]["standard"]
 
 
 rule cnmops_cvsc:
@@ -355,42 +367,44 @@ rule cnmops_cvsc:
     params:
         controlSampleNames=control_samples_names,
         caseSampleNames=case_samples_names,
-        autosomes=[str(ele) for ele in range(1, 39)],
-        heterosomes=["X"],
+        autosomes=cnmops_autosomes,
+        heterosomes=cnmops_heterosomes,
         casePloidy=[heterosomes_ploidy.get(name, 2) for name in case_samples_names],
         controlPloidy=[heterosomes_ploidy.get(name, 2) for name in control_samples_names],
         classes=["CN{}".format(ele) for ele in cnmops_intervals],
         foldChange=[ele/2.0 if ele != 0.0 else 0.025 for ele in cnmops_intervals],
         segAlgorithm=config["cnmops"]["segAlgorithm"],
-        WL=config["cnmops"]["WL"],
+        WL=config["cnmops"]["WL"]["cvsc"],
         returnPosterior=config["cnmops"]["returnPosterior"],
     threads: threads_max
     resources:
         mem_mb=memory_max
     output:
-        cnvs_autosomes="{results_cnv_dir}/cn.mops/cnmops.cvsc.autosomes.cnvs",
-        cnvr_autosomes="{results_cnv_dir}/cn.mops/cnmops.cvsc.autosomes.cnvr",
-        cnvs_heterosomes="{results_cnv_dir}/cn.mops/cnmops.cvsc.heterosomes.cnvs",
-        cnvr_heterosomes="{results_cnv_dir}/cn.mops/cnmops.cvsc.heterosomes.cnvr",
+        cnvs_autosomes="{results_cnv_dir}/cn.mops/cnmops.{WL}.cvsc.autosomes.cnvs",
+        cnvr_autosomes="{results_cnv_dir}/cn.mops/cnmops.{WL}.cvsc.autosomes.cnvr",
+        cnvs_heterosomes="{results_cnv_dir}/cn.mops/cnmops.{WL}.cvsc.heterosomes.cnvs",
+        cnvr_heterosomes="{results_cnv_dir}/cn.mops/cnmops.cvsc.{WL}.heterosomes.cnvr",
     script:
-        config["cnmops"]["script_cvsc"]
+        config["cnmops"]["script"]["cvsc"]
 
 
 rule call_cnmops_standard:
     input:
-        expand("{results_cnv_dir}/cn.mops/cnmops.{chromosomes}.{result}",
+        expand("{results_cnv_dir}/cn.mops/cnmops.{WL}.{chromosomes}.{result}",
                results_cnv_dir=[results_cnv_dir],
                chromosomes=["autosomes", "heterosomes"],
-               result=["cnvs", "cnvr"]
+               result=["cnvs", "cnvr"],
+               WL=[config["cnmops"]["WL"]["standard"]]*4
               ),
 
 
 rule call_cnmops_cvsc:
     input:
-        expand("{results_cnv_dir}/cn.mops/cnmops.cvsc.{chromosomes}.{result}",
+        expand("{results_cnv_dir}/cn.mops/cnmops.cvsc.{WL}.{chromosomes}.{result}",
                results_cnv_dir=[results_cnv_dir],
                chromosomes=["autosomes", "heterosomes"],
-               result=["cnvs", "cnvr"]
+               result=["cnvs", "cnvr"],
+               WL=[config["cnmops"]["WL"]["standard"]]*4
               ),
 
 

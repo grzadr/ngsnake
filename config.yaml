@@ -74,9 +74,12 @@ delly:
   #sv_types: ["DEL", "INS", "DUP", "INV"]
 
 cnmops:
-  script_standard: "/ngsnake/cnmops.R"
-  script_cvsc: "/ngsnake/cnmops_cvsc.R"
+  script:
+    standard: "/ngsnake/cnmops.R"
+    cvsc: "/ngsnake/cnmops_cvsc.R"
   groups_file: "/data/cnmops_groups.tsv"
   segAlgorithm: "DNAcopy"
-  WL: 100
+  WL:
+    standard: 100
+    cvsc: 500
   returnPosterior: false
