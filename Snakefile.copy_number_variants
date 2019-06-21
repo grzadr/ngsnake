@@ -26,6 +26,7 @@ def read_samples_names(directory):
     dirs = [ele for ele in dirs if "/" not in ele]
     return sorted(dirs)
 
+
 samples_names = read_samples_names(project_samples)
 
 print("{} samples loaded".format(len(samples_names)))
@@ -296,11 +297,24 @@ rule delly_filter_svs:
     shell:
         "(delly filter -f germline -o {output.bcf} {input.bcf} > {log.stdout}) 2> {log.stderr}"
 
+rule delly_convert_svs:
+    input:
+        bcf=rules.delly_filter_svs.output.bcf
+    output:
+        vcf="{results_cnv_dir}/delly/delly.{delly_type}.filtered.vcf"
+    log:
+        stderr="{results_cnv_dir}/delly/logs/DELLY.ConvertSVs.{delly_type}.err",
+    threads: 1
+    resources:
+        mem_mb=memory_min * 1
+    shell:
+        "(bcftools view {input.bcf} > {output}) 2> {log.stderr}"
+
 
 rule call_delly:
     input:
-        expand("{results_cnv_dir}/delly/delly.{delly_type}.filtered.bcf",
-               results_cnv_dir=[results_cnv_dir] * len(delly_types),
+        expand("{results_cnv_dir}/delly/delly.{delly_type}.filtered.vcf",
+               results_cnv_dir=[results_cnv_dir],
                delly_type=delly_types),
 
 
@@ -322,8 +336,8 @@ rule cnmops_standard:
                    sample=samples_names
                   ),
     log:
-        stderr="{results_cnv_dir}/cn.mops/logs/cn.mops.cvsc.err",
-        stdout="{results_cnv_dir}/cn.mops/logs/cn.mops.cvsc.log",
+        stderr="{results_cnv_dir}/cn.mops/logs/cnmops.{WL}.cvsc.err",
+        stdout="{results_cnv_dir}/cn.mops/logs/cnmops.{WL}.cvsc.log",
     params:
         sampleNames=samples_names,
         autosomes=cnmops_autosomes,
@@ -332,7 +346,7 @@ rule cnmops_standard:
         classes=["CN{}".format(ele) for ele in cnmops_intervals],
         foldChange=[ele/2.0 if ele != 0.0 else 0.025 for ele in cnmops_intervals],
         segAlgorithm=config["cnmops"]["segAlgorithm"],
-        WL=config["cnmops"]["WL"]["standard"],
+        WL="{wildcards.WL}",
         returnPosterior=config["cnmops"]["returnPosterior"],
     threads: threads_max
     resources:
@@ -374,16 +388,16 @@ rule cnmops_cvsc:
         classes=["CN{}".format(ele) for ele in cnmops_intervals],
         foldChange=[ele/2.0 if ele != 0.0 else 0.025 for ele in cnmops_intervals],
         segAlgorithm=config["cnmops"]["segAlgorithm"],
-        WL=config["cnmops"]["WL"]["cvsc"],
+        WL="{wildcards.WL}",
         returnPosterior=config["cnmops"]["returnPosterior"],
     threads: threads_max
     resources:
         mem_mb=memory_max
     output:
-        cnvs_autosomes="{results_cnv_dir}/cn.mops/cnmops.{WL}.cvsc.autosomes.cnvs",
-        cnvr_autosomes="{results_cnv_dir}/cn.mops/cnmops.{WL}.cvsc.autosomes.cnvr",
-        cnvs_heterosomes="{results_cnv_dir}/cn.mops/cnmops.{WL}.cvsc.heterosomes.cnvs",
-        cnvr_heterosomes="{results_cnv_dir}/cn.mops/cnmops.cvsc.{WL}.heterosomes.cnvr",
+        cnvs_autosomes="{results_cnv_dir}/cn.mops/cnmops_cvsc.{WL}.autosomes.cnvs",
+        cnvr_autosomes="{results_cnv_dir}/cn.mops/cnmops_cvsc.{WL}.autosomes.cnvr",
+        cnvs_heterosomes="{results_cnv_dir}/cn.mops/cnmops_cvsc.{WL}.heterosomes.cnvs",
+        cnvr_heterosomes="{results_cnv_dir}/cn.mops/cnmops_cvsc.{WL}.heterosomes.cnvr",
     script:
         config["cnmops"]["script"]["cvsc"]
 
@@ -394,17 +408,17 @@ rule call_cnmops_standard:
                results_cnv_dir=[results_cnv_dir],
                chromosomes=["autosomes", "heterosomes"],
                result=["cnvs", "cnvr"],
-               WL=[config["cnmops"]["WL"]["standard"]]*4
+               WL=[config["cnmops"]["WL"]["standard"]]
               ),
 
 
 rule call_cnmops_cvsc:
     input:
-        expand("{results_cnv_dir}/cn.mops/cnmops.cvsc.{WL}.{chromosomes}.{result}",
+        expand("{results_cnv_dir}/cn.mops/cnmops_cvsc.{WL}.{chromosomes}.{result}",
                results_cnv_dir=[results_cnv_dir],
                chromosomes=["autosomes", "heterosomes"],
                result=["cnvs", "cnvr"],
-               WL=[config["cnmops"]["WL"]["standard"]]*4
+               WL=[config["cnmops"]["WL"]["cvsc"]]
               ),
 
 
