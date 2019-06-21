@@ -80,6 +80,6 @@ cnmops:
   groups_file: "/data/cnmops_groups.tsv"
   segAlgorithm: "DNAcopy"
   WL:
-    standard: 100
+    standard: 500
     cvsc: 500
   returnPosterior: false
