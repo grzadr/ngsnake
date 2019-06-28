@@ -346,7 +346,7 @@ rule cnmops_standard:
         classes=["CN{}".format(ele) for ele in cnmops_intervals],
         foldChange=[ele/2.0 if ele != 0.0 else 0.025 for ele in cnmops_intervals],
         segAlgorithm=config["cnmops"]["segAlgorithm"],
-        WL="{wildcards.WL}",
+        WL=lambda wildcards: int(wildcards.WL),
         returnPosterior=config["cnmops"]["returnPosterior"],
     threads: threads_max
     resources:
@@ -388,7 +388,7 @@ rule cnmops_cvsc:
         classes=["CN{}".format(ele) for ele in cnmops_intervals],
         foldChange=[ele/2.0 if ele != 0.0 else 0.025 for ele in cnmops_intervals],
         segAlgorithm=config["cnmops"]["segAlgorithm"],
-        WL="{wildcards.WL}",
+        WL=lambda wildcards: int(wildcards.WL),
         returnPosterior=config["cnmops"]["returnPosterior"],
     threads: threads_max
     resources:
@@ -420,6 +420,12 @@ rule call_cnmops_cvsc:
                result=["cnvs", "cnvr"],
                WL=[config["cnmops"]["WL"]["cvsc"]]
               ),
+
+
+rule call_cnmops:
+    input:
+        standard=rules.call_cnmops_standard.input,
+        cvsc=rules.call_cnmops_cvsc.input,
 
 
 rule call_cnvs:
