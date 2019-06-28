@@ -70,8 +70,8 @@ cnvnator:
   bin_size: 500
 
 delly:
-  sv_types: ["DEL", "INS", "DUP", "INV", "BND"]
-  #sv_types: ["DEL", "INS", "DUP", "INV"]
+  #sv_types: ["DEL", "INS", "DUP", "INV", "BND"]
+  sv_types: ["DEL", "INS", "DUP", "INV"]
 
 cnmops:
   script:
